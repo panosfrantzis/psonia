@@ -150,7 +150,7 @@ table.pv{width:100%;border-collapse:collapse;font-size:13px}table.pv td,table.pv
       <h1>Pantry Stock-Up <span class="sub" id="hhname"></span></h1>
       <div class="sub" id="asof"></div>
     </div>
-    <div class="grp"><span class="sub" id="savestate"></span><button class="btn ghost" id="updnow" hidden>Update now</button></div>
+    <div class="grp"><span class="sub" id="savestate"></span><button class="btn" id="updnow">Update prices</button></div>
   </header>
 
   <div id="updbar" class="updbar" hidden role="status"></div>
@@ -964,6 +964,40 @@ async function renderAdd(){
   const { count } = await SB.from('members').select('*', { count: 'exact', head: true }).eq('household_id', HH.id);
   if(count != null) $('hh-members').textContent = '· '+count+(count===1?' member (you)':' members');
 }
+
+// ---------- Update prices: official daily prices from posokanei.gov.gr (Sklavenitis), matched by product name ----------
+const tokSet = s => new Set(String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/γρ/g,'g').replace(/gr\b/g,'g').replace(/[^a-zα-ω0-9]+/g,' ').trim().split(' ').filter(Boolean));
+async function updatePrices(){
+  const btn = document.getElementById('updnow'); btn.disabled = true; btn.textContent = 'Updating…';
+  try{
+    const r = await fetch('data/sklavenitis-prices.json?d=' + iso(today), {cache:'no-store'});
+    if(!r.ok) throw new Error('price file ' + r.status);
+    const f = await r.json();
+    const idx = f.items.map(x => ({t: tokSet(x[0]), x}));
+    const at = f.date + 'T08:00:00.000Z';
+    const items = Object.assign({}, state.prices ? state.prices.items : {});
+    let matched = 0, offers = 0, total = 0;
+    for(const p of PRODUCTS.values()){
+      if(!p.h.some(e => today - e.d <= 365*DAY)) continue;   // products bought in the last 12 months
+      total++;
+      const a = tokSet(p.name); let best = 0, hit = null;
+      for(const c of idx){ let n = 0; for(const w of a) if(c.t.has(w)) n++; const j = n / (a.size + c.t.size - n); if(j > best){ best = j; hit = c.x; } }
+      if(best < 0.9) continue;                                // names must match (truth first: no guessing)
+      const old = items[p.sku]; if(old && old.at && old.at > at) continue;   // keep a newer price already read
+      const [name, price, disc, pct] = hit;
+      // posokanei's is_discount flag is set on about half of all Sklavenitis products at normal prices (checked 29/10/2026),
+      // so it is not read as an offer: price only. Offers come from the sklavenitis.gr refresh; a 15%+ drop vs paid last still shows.
+      const still = old && old.promo && Math.abs((old.price ?? -1) - price) < 0.005;   // same price as a site offer read earlier: offer still running
+      items[p.sku] = still ? Object.assign({}, old, {at, src: 'posokanei ' + f.date + ' (offer seen on site ' + String(old.at).slice(0,10) + ')'})
+                           : {at, sku: p.sku, price, unit: 'τεμ.', old: null, badge: null, icon: null, promo: false, nb: false, src: 'posokanei ' + f.date};
+      matched++;
+    }
+    state.prices = {at, items}; save('prices'); rerender();
+    updBar(`Prices of ${f.date.split('-').reverse().join('/')} from posokanei.gov.gr: ${matched} of your ${total} products found. Offers are not in that data: use Refresh & settings for the site's offers. Products not listed there keep the price you paid last.`, 'ok');
+  }catch(e){ updBar('Price update failed: ' + esc(e.message || 'unknown error'), 'warn'); }
+  finally{ btn.disabled = false; btn.textContent = 'Update prices'; }
+}
+document.getElementById('updnow').onclick = updatePrices;
 SB.auth.onAuthStateChange(ev => { if(ev==='SIGNED_OUT') gate('g-auth'); });
 boot();
 })();

@@ -1,0 +1,18 @@
+name: Daily Sklavenitis prices from posokanei
+on:
+  schedule:
+    - cron: "17 7 * * *"   # 07:17 UTC, after the archive's daily update
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  prices:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/posokanei_extract.py
+      - run: |
+          git config user.name "psonia-prices"
+          git config user.email "psonia-prices@users.noreply.github.com"
+          git add data/sklavenitis-prices.json
+          git diff --cached --quiet || (git commit -m "Prices $(date -u +%F)" && git push)
