@@ -5,6 +5,8 @@ Answers one question: can an app on the user's own iPhone read sklavenitis.gr pr
 1. Open `PsoniaTest.swiftpm` in Xcode (double-click).
 2. Connect the iPhone, pick it as the run destination. Signing: your Apple ID ("Personal Team") — free; the app then runs for 7 days.
 3. Press Run. On the iPhone: Settings → General → VPN & Device Management → trust your developer profile (first time only).
+Built and run on 30/10/2026 (Xcode 26.3, iPhone 17 Pro simulator): 5 of 5 product pages read from sklavenitis.gr, no blocking.
+
 4. In the app: **Eshop** (top right): sign in to sklavenitis.gr once. **1 · Get my data** reads your whole order history by itself. **2 · Update prices** reads the current price and offer of every product found. **3 · Send to Psonia** puts orders and prices into your household; reload Psonia.
 
 Privacy: no personal data in this repository. `Resources/products.json` is empty here; the products come from the user's own order history after sign-in.

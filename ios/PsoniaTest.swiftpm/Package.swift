@@ -13,7 +13,7 @@ let package = Package(
             bundleIdentifier: "com.panosfrantzis.psoniatest",
             displayVersion: "0.1",
             bundleVersion: "1",
-            appIcon: .placeholder(icon: .cart),
+            appIcon: .placeholder(icon: .carrot),
             accentColor: .presetColor(.green),
             supportedDeviceFamilies: [.phone],
             supportedInterfaceOrientations: [.portrait]

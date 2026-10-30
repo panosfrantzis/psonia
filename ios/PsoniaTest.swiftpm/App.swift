@@ -318,8 +318,17 @@ struct ContentView: View {
                 }
             }
         }
+        .task {
+            // Self-test (simulator, PSONIA_AUTOTEST=1): read 5 product pages and print what was read
+            guard ProcessInfo.processInfo.environment["PSONIA_AUTOTEST"] == "1" else { return }
+            try? await Task.sleep(for: .seconds(1))
+            await reader.read(Array(products.prefix(5)))
+            for p in products.prefix(5) { let r = reader.readings[p.sku]
+                print("AUTOTEST|\(p.name)|price=\(r?.price.map { String($0) } ?? "nil")|old=\(r?.old.map { String($0) } ?? "nil")|badge=\(r?.badge ?? "nil")|blocked=\(r?.blocked ?? false)|none=\(r?.none ?? false)") }
+            print("AUTOTEST|status=\(reader.status)")
+        }
         .onAppear {
-            if products.isEmpty, let u = Bundle.module.url(forResource: "products", withExtension: "json"),
+            if products.isEmpty, let u = (Bundle.main.url(forResource: "products", withExtension: "json") ?? Bundle.main.url(forResource: "products", withExtension: "json", subdirectory: "Resources")),
                let d = try? Data(contentsOf: u), let list = try? JSONDecoder().decode([Product].self, from: d) { products = list }
         }
     }
