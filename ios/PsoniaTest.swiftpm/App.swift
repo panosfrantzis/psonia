@@ -269,7 +269,7 @@ struct ContentView: View {
                         }.buttonStyle(.bordered)
                     }
                     Button("3 · Send to Psonia") { showSend = true }.buttonStyle(.bordered).disabled((reader.readings.isEmpty && reader.orders.isEmpty) || reader.running)
-                    Text(reader.orders.isEmpty ? "Sign in once with Eshop (top right), then 1 · Get my data reads your orders by itself. Until then the list is your regular products from Pantry Stock-Up."
+                    Text(reader.orders.isEmpty ? "Sign in once with Eshop (top right), then 1 · Get my data reads your orders by itself."
                                                : "\(reader.orders.count) orders · \(products.count) products from your orders").font(.caption).foregroundStyle(.secondary)
                 }
                 ForEach(products) { p in
