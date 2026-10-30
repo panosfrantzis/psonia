@@ -976,13 +976,18 @@ async function updatePrices(){
     const idx = f.items.map(x => ({t: tokSet(x[0]), x}));
     const at = f.date + 'T08:00:00.000Z';
     const items = Object.assign({}, state.prices ? state.prices.items : {});
+    // drop earlier posokanei prices first: a product no longer matched must not keep a price from another product
+    for(const k of Object.keys(items)) if(String(items[k].src||'').startsWith('posokanei')) delete items[k];
     let matched = 0, offers = 0, total = 0;
     for(const p of PRODUCTS.values()){
       if(!p.h.some(e => today - e.d <= 365*DAY)) continue;   // products bought in the last 12 months
       total++;
-      const a = tokSet(p.name); let best = 0, hit = null;
-      for(const c of idx){ let n = 0; for(const w of a) if(c.t.has(w)) n++; const j = n / (a.size + c.t.size - n); if(j > best){ best = j; hit = c.x; } }
-      if(best < 0.9) continue;                                // names must match (truth first: no guessing)
+      // exact name only (same words, any order/case/accents): one extra word can be another product,
+      // e.g. "Αλεύρι Βιολογικό για Όλες τις Χρήσεις" ≠ "Αλεύρι για Όλες τις Χρήσεις" (Panos, 30/10/2026)
+      const a = tokSet(p.name);
+      const hits = idx.filter(c => c.t.size === a.size && [...a].every(w => c.t.has(w)));
+      if(hits.length !== 1) continue;                         // none, or ambiguous: keep the price you paid last
+      const hit = hits[0].x;
       const old = items[p.sku]; if(old && old.at && old.at > at) continue;   // keep a newer price already read
       const [name, price, disc, pct] = hit;
       // posokanei's is_discount flag is set on about half of all Sklavenitis products at normal prices (checked 29/10/2026),
