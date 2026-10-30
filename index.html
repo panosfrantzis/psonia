@@ -1,379 +1,963 @@
-<!doctype html>
-<html lang="el">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ψώνια & Αποθήκη</title>
-<!-- Shopping Companion App v1 (2026-10-30, Claude solo draft). Data: Supabase project "shopping-companion" (Frankfurt).
-     Each household sees only its own data. Maths from Pantry Stock-Up (use per month, stock, buy). -->
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Psonia — Pantry Stock-Up</title>
+<!-- Psonia v2 (2026-10-30, Claude solo for Panos Frantzis): Pantry Stock-Up for any household. Same tabs and maths as Pantry Stock-Up;
+     data in Supabase project shopping-companion (Frankfurt), shared by the members of one household, private to them (row-level security). -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Commissioner:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-:root{--bg:#f7f7f5;--card:#fff;--ink:#1d1d1b;--muted:#6b6b68;--line:#e3e3df;--acc:#0f7b5f;--acc2:#e6f3ef;--warn:#b45309;--warnbg:#fef3c7;--bad:#b91c1c}
-@media (prefers-color-scheme:dark){:root{--bg:#121211;--card:#1c1c1a;--ink:#ecece8;--muted:#a3a39e;--line:#2f2f2c;--acc:#34d399;--acc2:#12302a;--warn:#fbbf24;--warnbg:#3a2c08;--bad:#f87171}}
-*{box-sizing:border-box}body{margin:0;font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
-header{position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--line);z-index:5}
-.wrap{max-width:980px;margin:0 auto;padding:12px 16px}
-h1{font-size:18px;margin:0}h2{font-size:16px;margin:18px 0 8px}
-nav{display:flex;gap:4px;overflow-x:auto;padding:0 16px;max-width:980px;margin:0 auto}
-nav button{border:0;background:none;padding:10px 12px;color:var(--muted);font:inherit;border-bottom:2px solid transparent;white-space:nowrap;cursor:pointer}
-nav button.on{color:var(--acc);border-color:var(--acc);font-weight:600}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin:10px 0}
-input,select,textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);max-width:100%}
-textarea{width:100%;min-height:120px}
-button.b{font:inherit;padding:8px 14px;border-radius:8px;border:1px solid var(--acc);background:var(--acc);color:#fff;cursor:pointer}
-button.g{font:inherit;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
-button.s{padding:2px 9px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;font:inherit}
-table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:6px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
-th{font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.03em}
-.num{text-align:right;font-variant-numeric:tabular-nums}.muted{color:var(--muted)}.small{font-size:12px}
-.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;background:var(--acc2);color:var(--acc)}
-.offer{background:var(--warnbg);color:var(--warn)}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.hidden{display:none!important}.scroll{overflow-x:auto}.done td{opacity:.45;text-decoration:line-through}
-.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.kpi div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px}
-.kpi b{display:block;font-size:20px}#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;display:none}
+/* Layout: a working tool — summary strip, tab bar, then one dense list per tab. Shelf-label look: ink green, offer amber. */
+:root{
+  --bg:#f4f6f3; --panel:#ffffff; --ink:#15211b; --mute:#5e6b64; --line:#dde3dd;
+  --accent:#0b6e4f; --accent-soft:#e2f0ea; --offer:#b86e00; --offer-soft:#fbefd9;
+  --bad:#b3261e; --bad-soft:#f9e3e1; --warn:#9a6a00; --warn-soft:#f6edd2; --ok:#2e7d4f; --ok-soft:#e3f1e8;
+  --f-ui:"Commissioner","Segoe UI",system-ui,sans-serif; --f-num:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101613; --panel:#172019; --ink:#e4ebe6; --mute:#93a199; --line:#2a352e;
+  --accent:#4cc092; --accent-soft:#163327; --offer:#f0aa3c; --offer-soft:#3a2a10;
+  --bad:#ff8a80; --bad-soft:#3a1714; --warn:#e9c15a; --warn-soft:#352b10; --ok:#7fd1a0; --ok-soft:#14301f; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101613; --panel:#172019; --ink:#e4ebe6; --mute:#93a199; --line:#2a352e;
+  --accent:#4cc092; --accent-soft:#163327; --offer:#f0aa3c; --offer-soft:#3a2a10;
+  --bad:#ff8a80; --bad-soft:#3a1714; --warn:#e9c15a; --warn-soft:#352b10; --ok:#7fd1a0; --ok-soft:#14301f; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:14px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+h1{font-size:22px;margin:0;font-weight:700;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:16px;margin:0;font-weight:600}
+.sub{color:var(--mute);font-size:13px}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.kpi{background:var(--panel);padding:12px 14px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.kpi b{font-family:var(--f-num);font-size:20px;font-weight:600}
+.kpi span{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute)}
+@media (max-width:640px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.chart{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.chart svg{display:block;width:100%;height:auto}
+nav{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto}
+nav button{font:inherit;font-weight:600;background:none;border:0;border-bottom:2px solid transparent;color:var(--mute);padding:10px 12px;cursor:pointer;white-space:nowrap}
+nav button[aria-selected="true"]{color:var(--ink);border-color:var(--accent)}
+nav button .pill{margin-left:6px}
+button,.btn{font:inherit}
+.btn{background:var(--accent);color:var(--panel);border:0;border-radius:7px;padding:8px 14px;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.btn:focus-visible,nav button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.bar .grp{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+input[type=search],input[type=date],input[type=number],select,textarea{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:7px 10px}
+input[type=search]{min-width:0;width:220px}
+.list{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 80px 84px 230px 120px;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row.ch{grid-template-columns:minmax(220px,1fr) 80px 88px 76px 112px 112px 70px 88px}
+.chwrap{overflow-x:auto}
+.swap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) 110px;gap:12px;padding:10px 14px;border-top:1px solid var(--line);align-items:start}
+.swap:first-child{border-top:0}
+.swap .sw-from b{font-weight:500;display:block}
+.sw-to{display:flex;flex-direction:column;gap:6px;min-width:0}
+.sw-alt{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:0 8px}
+.noswap{grid-column:3;grid-row:1 / span 2;align-self:center;border:1px solid var(--line);background:var(--bg);color:var(--mute);border-radius:6px;width:26px;height:26px;cursor:pointer}
+.sw-alt .meta{grid-column:1}
+.sw-alt b{grid-column:2;grid-row:1 / span 2;align-self:center}
+.sw-save{text-align:right;display:flex;flex-direction:column}
+@media (max-width:720px){.swap{grid-template-columns:minmax(0,1fr)}.sw-save{text-align:left}}
+.chwrap .row.ch{min-width:900px}
+.dl2 small{display:block}
+.row.head{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);padding-block:8px;background:var(--bg)}
+.row .name{min-width:0}
+.row .name b{font-weight:500;display:block;overflow-wrap:anywhere}
+.plink{color:var(--ink);text-decoration:none}
+.plink span{color:var(--accent);font-size:12px}
+.plink:hover{color:var(--accent);text-decoration:underline}
+.row .meta{font-size:12px;color:var(--mute)}
+.r{text-align:right}
+.pill{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.p-bad{background:var(--bad-soft);color:var(--bad)} .p-warn{background:var(--warn-soft);color:var(--warn)}
+.p-ok{background:var(--ok-soft);color:var(--ok)} .p-off{background:var(--offer-soft);color:var(--offer)} .p-mute{background:var(--bg);color:var(--mute);border:1px solid var(--line)}
+.stock{display:flex;align-items:center;gap:4px;justify-content:flex-end}
+.stock input{width:56px;text-align:right;padding:5px 6px;font-family:var(--f-num)}
+.stock button{width:26px;height:28px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;cursor:pointer}
+.est{font-size:10px;color:var(--mute);text-align:right}
+.cathead{padding:8px 14px;background:var(--bg);font-size:12px;font-weight:600;color:var(--mute);border-top:1px solid var(--line)}
+.offer-tag{color:var(--offer);font-weight:600}
+dl.pg{margin:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 8px;text-align:left;font-size:12px;align-items:baseline}
+dl.pg dt{color:var(--mute);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+dl.pg dd{margin:0;display:flex;flex-wrap:wrap;gap:0 6px;align-items:baseline;min-width:0}
+dl.pg dd b{font-weight:600;font-size:13px}
+dl.pg dd small{color:var(--mute);font-size:11px}
+dl.pg dd s{color:var(--mute)}
+dl.pg .good{color:var(--ok)}
+.strike{text-decoration:line-through;color:var(--mute)}
+.empty{padding:28px 14px;text-align:center;color:var(--mute)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media (max-width:760px){.two{grid-template-columns:minmax(0,1fr)}}
+pre.code{margin:0;max-height:180px;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:10px;font-family:var(--f-num);font-size:11px;white-space:pre-wrap;word-break:break-all}
+textarea{width:100%;min-height:120px;font-family:var(--f-num);font-size:12px}
+ol.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.months{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px 16px}
+.months label{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px}
+.months input{width:64px}
+.updbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 14px;border-radius:10px;background:var(--accent-soft);color:var(--ink);font-size:13px}
+.updbar.warn{background:var(--warn-soft)} .updbar.ok{background:var(--ok-soft)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-weight:600}
+.note{font-size:12px;color:var(--mute)}
+.ck{display:grid;grid-template-columns:28px 64px minmax(0,1fr) 110px;gap:10px;align-items:center;padding:9px 14px;border-top:1px solid var(--line)}
+.ck:first-child{border-top:0}
+.ck input{width:20px;height:20px;accent-color:var(--accent)}
+.ck.done{opacity:.5}.ck.done .plink{text-decoration:line-through}
+.ck .q{font-family:var(--f-num);font-weight:600}
+.ck .code{display:block;font-family:var(--f-num);font-size:11px;color:var(--mute)}
+@media (max-width:560px){.ck{grid-template-columns:28px 54px minmax(0,1fr)}.ck .r{grid-column:3;text-align:left}}
+@media (max-width:720px){
+  .row{grid-template-columns:minmax(0,1fr) auto;row-gap:6px}
+  .row.head{display:none}
+  .chwrap .row.head.ch{display:grid}
+  .row .c-rate{display:none}
+  .row .c-status,.row .c-price{grid-column:1;text-align:left}
+  .row .c-act{grid-column:2;grid-row:1 / span 3}
+}
+.gate{max-width:440px;margin:40px auto}.gate input{width:100%;margin:4px 0}.gate .row2{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+table.pv{width:100%;border-collapse:collapse;font-size:13px}table.pv td,table.pv th{border-top:1px solid var(--line);padding:4px 6px;text-align:left}table.pv input{width:100%;font:inherit;padding:3px 5px;border:1px solid var(--line);border-radius:5px;background:var(--panel);color:var(--ink)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
-</head>
-<body>
-<header>
-  <div class="wrap row" style="justify-content:space-between"><h1>Ψώνια & Αποθήκη</h1><span class="small muted" id="who"></span></div>
-  <nav id="tabs" class="hidden">
-    <button data-t="order">Επόμενη παραγγελία</button><button data-t="pantry">Αποθήκη</button>
-    <button data-t="items">Προϊόντα</button><button data-t="buy">Αγορές</button><button data-t="set">Ρυθμίσεις</button>
-  </nav>
-</header>
-<main class="wrap">
 
-<section id="v-auth" class="hidden card" style="max-width:420px">
-  <h2>Σύνδεση</h2>
-  <p class="small muted">Πρώτη φορά: «Νέος λογαριασμός», επιβεβαίωσε το e-mail που θα λάβεις, μετά «Σύνδεση».</p>
-  <div class="row" style="flex-direction:column;align-items:stretch">
-    <input id="a-email" type="email" placeholder="E-mail" autocomplete="email">
-    <input id="a-pass" type="password" placeholder="Κωδικός (8+ χαρακτήρες)" autocomplete="current-password">
-    <div class="row"><button class="b" id="a-in">Σύνδεση</button><button class="g" id="a-up">Νέος λογαριασμός</button></div>
-  </div>
-  <p id="a-msg" class="small"></p>
-</section>
-
-<section id="v-hh" class="hidden card" style="max-width:520px">
-  <h2>Νοικοκυριό</h2>
-  <p class="small muted">Τα προϊόντα, η αποθήκη και οι αγορές ανήκουν σε ένα νοικοκυριό. Φτιάξε νέο ή μπες σε υπάρχον με τον κωδικό του (6 γράμματα).</p>
-  <div class="row"><input id="hh-name" placeholder="Όνομα, π.χ. Σπίτι"><button class="b" id="hh-new">Νέο νοικοκυριό</button></div>
-  <div class="row" style="margin-top:8px"><input id="hh-code" placeholder="Κωδικός" maxlength="6" style="text-transform:uppercase"><button class="g" id="hh-join">Είσοδος</button></div>
-</section>
-
-<section id="t-order" class="tab hidden">
-  <div class="kpi" id="kpi"></div>
-  <div class="row" style="margin-top:10px"><span>Επόμενη παραγγελία:</span><input type="date" id="o-date"><span class="small muted" id="o-cycle"></span></div>
-  <div class="card scroll"><table id="o-tbl"></table></div>
-  <div class="row"><button class="g" id="o-copy">Αντιγραφή ως πίνακας</button><button class="g" id="o-copytxt">Αντιγραφή λίστας</button></div>
-  <p class="small muted">Τσέκαρε μια γραμμή όταν μπει στο καλάθι του eshop. Η ποσότητα «Αγορά» = κατανάλωση × (μέρες ως την παραγγελία + ένας κύκλος) − απόθεμα· σε προσφορά, με ορίζοντα αποθήκευσης της κατηγορίας.</p>
-</section>
-
-<section id="t-pantry" class="tab hidden">
-  <div class="row"><input id="p-filter" placeholder="Φίλτρο…"><span class="small muted">− / + αλλάζει το απόθεμα (μέτρηση τώρα). Ζυγιζόμενα: βήμα 0,1 κιλό.</span></div>
-  <div class="card scroll"><table id="p-tbl"></table></div>
-</section>
-
-<section id="t-items" class="tab hidden">
-  <div class="card">
-    <h2 style="margin-top:0">Νέο προϊόν</h2>
-    <div class="row">
-      <input id="i-name" placeholder="Όνομα (όπως στο site)" style="flex:2;min-width:220px">
-      <input id="i-cat" placeholder="Κατηγορία" list="cats"><datalist id="cats"></datalist>
-      <input id="i-ret" placeholder="Κατάστημα" value="Σκλαβενίτης">
-      <input id="i-code" placeholder="Κωδικός" style="width:110px">
-      <input id="i-url" placeholder="Link προϊόντος" style="flex:2;min-width:200px">
-      <label class="small"><input type="checkbox" id="i-kg"> με το κιλό</label>
-      <label class="small">Ορίζοντας προσφοράς (μήνες) <input id="i-hz" type="number" min="0" step="0.5" value="0" style="width:70px"></label>
-      <button class="b" id="i-add">Προσθήκη</button>
+<div class="gate card" id="g-auth" hidden>
+  <h1>Psonia</h1><p class="sub">Pantry Stock-Up for your household. First time: Create account, confirm the e-mail you receive, then Sign in.</p>
+  <input type="email" id="a-email" placeholder="E-mail" autocomplete="email"><input type="password" id="a-pass" placeholder="Password (8+ characters)" autocomplete="current-password">
+  <div class="row2"><button class="btn" id="a-in">Sign in</button><button class="btn ghost" id="a-up">Create account</button></div><p class="note" id="a-msg"></p>
+</div>
+<div class="gate card" id="g-hh" hidden>
+  <h2>Household</h2><p class="sub">Products, stock and orders belong to a household. Create one, or join an existing one with its 6-letter code.</p>
+  <input id="hh-name" placeholder="Name, e.g. Home"><div class="row2"><button class="btn" id="hh-new">Create household</button></div>
+  <input id="hh-code" placeholder="Code" maxlength="6" style="text-transform:uppercase"><div class="row2"><button class="btn ghost" id="hh-join">Join</button><button class="btn ghost" id="hh-out">Sign out</button></div><p class="note" id="hh-msg"></p>
+</div>
+<div class="wrap" id="app" hidden>
+  <header>
+    <div>
+      <h1>Pantry Stock-Up <span class="sub" id="hhname"></span></h1>
+      <div class="sub" id="asof"></div>
     </div>
-  </div>
-  <div class="card scroll"><table id="i-tbl"></table></div>
-</section>
+    <div class="grp"><span class="sub" id="savestate"></span><button class="btn ghost" id="updnow" hidden>Update now</button></div>
+  </header>
 
-<section id="t-buy" class="tab hidden">
-  <div class="card">
-    <h2 style="margin-top:0">Εισαγωγή αγορών (επικόλληση)</h2>
-    <p class="small muted">Μία γραμμή ανά προϊόν: <code>ημερομηνία ; προϊόν ; ποσότητα ; τιμή μονάδας</code> (ή με Tab, π.χ. από Excel ή από το ιστορικό παραγγελιών του eshop). Ημερομηνία 30/10/2026 ή 2026-10-30. Δεκαδικά με κόμμα ή τελεία. Νέα ονόματα γίνονται νέα προϊόντα.</p>
-    <textarea id="b-paste" placeholder="30/10/2026;Γάλα φρέσκο 1L;2;1,49"></textarea>
-    <div class="row"><select id="b-src"><option value="order">Παραγγελία eshop</option><option value="receipt">Απόδειξη καταστήματος</option><option value="manual">Χειροκίνητα</option></select>
-      <input id="b-ret" placeholder="Κατάστημα" value="Σκλαβενίτης"><button class="g" id="b-check">Έλεγχος</button></div>
-    <div id="b-preview" class="scroll"></div>
-  </div>
-  <div class="card">
-    <h2 style="margin-top:0">Απόδειξη από φωτογραφία <span class="pill">στη συσκευή, δωρεάν</span></h2>
-    <p class="small muted">Η ανάγνωση γίνεται στον browser σου (Tesseract, ελληνικά). Δεν στέλνεται πουθενά. Είναι πιο αδύναμη από AI: ελέγχεις τις γραμμές πριν την αποθήκευση.</p>
-    <div class="row"><input type="file" id="r-file" accept="image/*" capture="environment"><input type="date" id="r-date"><span id="r-msg" class="small muted"></span></div>
-  </div>
-  <h2>Ιστορικό</h2>
-  <div class="kpi" id="spend"></div>
-  <div class="card scroll"><table id="h-tbl"></table></div>
-</section>
+  <div id="updbar" class="updbar" hidden role="status"></div>
+  <section class="kpis" id="kpis"></section>
+  <section class="chart"><div class="bar"><h2>Monthly spend, last 24 months</h2><span class="note">paid total per month (€)</span></div><div id="chart"></div></section>
 
-<section id="t-set" class="tab hidden">
-  <div class="card">
-    <h2 style="margin-top:0">Ρυθμίσεις νοικοκυριού</h2>
-    <div class="row"><label>Κύκλος παραγγελίας (μέρες) <input id="s-cycle" type="number" min="3" style="width:80px"></label>
-      <label>Μηνιαίος προϋπολογισμός € <input id="s-budget" type="number" min="0" step="10" style="width:110px"></label>
-      <button class="b" id="s-save">Αποθήκευση</button></div>
-    <p>Κωδικός για να μπει άλλο μέλος: <b id="s-code" class="pill"></b> <span class="small muted">(το δίνεις στη σύζυγο/φίλο· βλέπει και αλλάζει τα ίδια στοιχεία)</span></p>
-    <p class="small muted">Μέλη: <span id="s-members"></span></p>
-  </div>
-  <div class="card">
-    <h2 style="margin-top:0">Τα δεδομένα σου</h2>
-    <div class="row"><button class="g" id="s-export">Λήψη όλων (JSON)</button><button class="g" id="s-out">Αποσύνδεση</button></div>
-    <p class="small muted">Τα δεδομένα είναι δικά σου: αποθηκεύονται στη Supabase (Φρανκφούρτη, ΕΕ), ορατά μόνο στα μέλη του νοικοκυριού.</p>
-  </div>
-</section>
-</main>
-<div id="toast"></div>
+  <nav role="tablist" id="tabs">
+    <button role="tab" data-tab="list" aria-selected="true">Next order <span class="pill p-warn" id="n-list"></span></button>
+    <button role="tab" data-tab="stock" aria-selected="false">Stock</button>
+    <button role="tab" data-tab="offers" aria-selected="false">Offers <span class="pill p-off" id="n-off"></span></button>
+    <button role="tab" data-tab="change" aria-selected="false">Price change</button>
+    <button role="tab" data-tab="swaps" aria-selected="false">Cheaper swaps</button>
+    <button role="tab" data-tab="add" aria-selected="false">Add purchases</button>
+    <button role="tab" data-tab="refresh" aria-selected="false">Refresh &amp; settings</button>
+  </nav>
+
+  <section id="v-list"></section>
+  <section id="v-stock" hidden></section>
+  <section id="v-offers" hidden></section>
+  <section id="v-change" hidden></section>
+  <section id="v-swaps" hidden></section>
+  <section id="v-add" hidden></section>
+  <section id="v-refresh" hidden></section>
+</div>
+
+<script type="text/plain" id="snippet">(async()=>{
+const SINCE='__SINCE__',DO_ORDERS=__ORDERS__,DO_OFFERS=__OFFERS__,ITEMS=__ITEMS__;
+const P=new DOMParser(),sl=ms=>new Promise(r=>setTimeout(r,ms));
+const num=s=>{if(s==null)return null;const v=parseFloat(String(s).replace(/[^\d,.-]/g,'').replace(/\./g,'').replace(',','.'));return isNaN(v)?null:v};
+const get=async u=>{const r=await fetch(u,{credentials:'include'});if(!r.ok)throw new Error('HTTP '+r.status);return P.parseFromString(await r.text(),'text/html')};
+const box=document.createElement('div');box.style.cssText='position:fixed;inset:20px;z-index:2147483647;background:#fff;color:#111;border:2px solid #0b6e4f;border-radius:10px;padding:16px;font:14px system-ui;overflow:auto';
+const msg=document.createElement('p');box.append(msg);document.body.append(box);const say=t=>msg.textContent=t;
+const out={v:1,at:new Date().toISOString(),orders:[],offers:[],prices:[],partial:false};
+if(DO_ORDERS)try{say('Reading orders…');const L=await get('/account/istoriko-paraggelion/');
+ const ids=[...new Set([...L.querySelectorAll('main a[href*="OrderNumber="]')].map(a=>a.href.split('OrderNumber=')[1]))];
+ for(const id of ids){await sl(1200);const d=await get('/account/istoriko-paraggelion/?OrderNumber='+id);const t=d.querySelector('main').innerText.replace(/\s+/g,' ');
+  const dm=(t.match(/Ημερομηνία Παράδοσης (\d\d)\/(\d\d)\/(\d{4})/)||[]);const date=dm[3]+'-'+dm[2]+'-'+dm[1];if(!dm[1]||date<=SINCE)break;
+  const items=[...d.querySelectorAll('tr.product')].map(r=>{const a=r.querySelector('.product-td a');const q=r.querySelector('.quant-td').innerText.trim();
+   return [((r.getAttribute('data-plugin-userlist')||'').match(/"Skus":"(\d+)"/)||[])[1]||'',a?a.textContent.trim():r.querySelector('.product-td').textContent.trim(),((a&&a.getAttribute('href'))||'').replace(/^\/|\/$/g,''),num(q),q.replace(/[\d.,\s]/g,''),num(r.querySelector('.priceWrp').innerText)]});
+  out.orders.push({d:date,total:num((t.match(/Σύνολο Παραγγελίας ([\d.,]+) €/)||[])[1]),basket:num((t.match(/Αξία Καλαθιού\*\* ([\d.,]+) €/)||[])[1]),items});}
+}catch(e){out.partial=true;out.err='orders: '+e.message}
+const seen=new Set();
+if(DO_OFFERS)try{for(let pg=1;pg<=80;pg++){say('Reading offers, page '+pg+' ('+out.offers.length+' found)…');const d=await get('/sylloges/prosfores/?pg='+pg);const cards=[...d.querySelectorAll('.product')];if(!cards.length)break;let fresh=0;
+ for(const c of cards){let sku=null;try{sku=JSON.parse(c.getAttribute('data-plugin-product')).sku}catch(e){}sku=sku||c.getAttribute('data-anchortarget');if(!sku||seen.has(sku))continue;seen.add(sku);fresh++;
+  const pr=c.querySelector('.price');const old=num(c.querySelector('.deleted__price')&&c.querySelector('.deleted__price').textContent);
+  const badge=[...c.querySelectorAll('.sign-badges .offer-span,.hightlight')].map(x=>x.textContent.replace(/\s+/g,'')).join(' ')||null;
+  const icon=(c.querySelector('.offerIcon__img')||{}).alt||null;
+  out.offers.push({sku,name:(c.querySelector('.product__title')||{}).textContent?.trim()||'',price:num(pr&&pr.getAttribute('data-price')),unit:((pr&&pr.querySelector('span')||{}).textContent||'').replace('/','').trim(),old,badge,icon,promo:!!(old||badge)});}
+ if(!fresh)break;await sl(1500);}}catch(e){out.partial=true;out.err=(out.err?out.err+'; ':'')+'offers: '+e.message}
+if(ITEMS.length)try{let i=0;for(const [sku,path] of ITEMS){i++;say('Reading prices '+i+' of '+ITEMS.length+'…');const d=await get('/'+path+'/');const m=d.querySelector('.product-detail');if(!m){await sl(1500);continue;}
+ let meta={};try{meta=JSON.parse(m.getAttribute('data-plugin-product')||(m.querySelector('[data-plugin-product]')||{getAttribute:()=>'{}'}).getAttribute('data-plugin-product'))}catch(e){}
+ const pr=m.querySelector('.priceWrp .price');const del=m.querySelector('.deleted__price');
+ const badge=[...m.querySelectorAll('.sign-badges .offer-span,.hightlight')].map(x=>x.textContent.replace(/\s+/g,'')).join(' ')||null;const icon=(m.querySelector('.offerIcon__img')||{}).alt||null;const old=num(del&&del.textContent);
+ out.prices.push({sku,price:num(pr&&pr.getAttribute('data-price')),unit:((pr&&pr.querySelector('span')||{}).textContent||'').replace('/','').trim(),old,badge,icon,promo:!!(old||badge),nb:!!meta.notBuyable});await sl(1500);}}catch(e){out.partial=true;out.err=(out.err?out.err+'; ':'')+'prices: '+e.message}
+const json=JSON.stringify(out);say('Done: '+out.orders.length+' new orders, '+out.offers.length+' offer-page products, '+out.prices.length+' prices'+(out.partial?' (stopped early: '+out.err+')':'')+'. Copy this and paste it into Pantry Stock-Up.');
+const ta=document.createElement('textarea');ta.value=json;ta.style.cssText='width:100%;height:60%;font:12px monospace';const b=document.createElement('button');b.textContent='Copy';b.style.cssText='margin:8px 8px 0 0;padding:8px 14px';
+b.onclick=()=>{ta.select();navigator.clipboard.writeText(json).then(()=>b.textContent='Copied',()=>{document.execCommand('copy');b.textContent='Copied'})};
+const x=document.createElement('button');x.textContent='Close';x.style.cssText='padding:8px 14px';x.onclick=()=>box.remove();box.append(ta,b,x);
+})();</script>
 
 <script>
-const SB_URL = "https://hyxnwvnjiasjgfdohztx.supabase.co";
-const SB_KEY = "sb_publishable_9HaJlBsEsRmzW-YgffdlHg_R8ekR6Qd";
-const sb = supabase.createClient(SB_URL, SB_KEY);
-const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-const eur = (v) => v == null || isNaN(v) ? "–" : Number(v).toLocaleString("el-GR", { style: "currency", currency: "EUR" });
-const n1 = (v, kg) => v == null || isNaN(v) ? "–" : (kg ? Number(v).toLocaleString("el-GR", { maximumFractionDigits: 1 }) : Math.round(v).toLocaleString("el-GR"));
-const DAY = 864e5, today = () => new Date(new Date().toDateString());
-const toast = (m) => { const t = $("toast"); t.textContent = m; t.style.display = "block"; setTimeout(() => t.style.display = "none", 2600); };
-const num = (s) => { if (s == null) return NaN; s = String(s).trim().replace(/€/g, "").replace(/\s/g, ""); if (/,\d+$/.test(s)) s = s.replace(/\./g, "").replace(",", "."); return parseFloat(s); };
-const pdate = (s) => { s = String(s).trim(); let m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/); if (m) { const y = m[3].length === 2 ? "20" + m[3] : m[3]; return `${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`; } m = s.match(/^\d{4}-\d{2}-\d{2}$/); return m ? s : null; };
-const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zα-ω0-9]+/g, " ").trim();
+(() => {
+const DEFAULT_CATS = ["Παντοπωλείο", "Τυροκομικά", "Προσωπική φροντίδα", "Απορρυπαντικά & καθαριστικά", "Ψωμί & αρτοσκευάσματα", "Πρωινό & ροφήματα", "Αυγά, βούτυρα & μαργαρίνες", "Χαρτικά & σερβιέτες", "Οικιακή χρήση", "Μπισκότα & σοκολάτες", "Κατεψυγμένα", "Μιας χρήσης", "Αλλαντικά", "Ξηροί καρποί & σνακ", "Γιαούρτια & κρέμες", "Γάλατα & χυμοί ψυγείου", "Ορεκτικά & delicatessen", "Φρέσκο κρέας", "Φρούτα & λαχανικά", "Κάβα", "Αναψυκτικά & νερά"];
+let RAW = {cats: DEFAULT_CATS, P: [], O: []};
+let CATS = RAW.cats;
+const CATSLUG = ["trofima-pantopoleioy","turokomika-futika-anapliromata","kallyntika-eidi-prosopikis-ygieinis","aporrypantika-eidi-katharismoy","eidi-artozacharoplasteioy","eidi-proinoy-rofimata","ayga-voytyra-margarines-nopes-zymes-zomoi-psygeioy","chartika-panes-servietes","eidi-oikiakis-chrisis","mpiskota-sokolates-zacharodi","katepsygmena","eidi-mias-chrisis-eidi-parti","allantika","xiroi-karpoi-snak","giaoyrtia-kremes-galaktos-epidorpia-psygeioy","galata-rofimata-chymoi-psygeioy","orektika-delicatessen","fresko-kreas","freska-froyta-lachanika","kava","anapsyktika-nera-chymoi"];
+// default stock-up horizon (months) per category; 0 = buy only for the next cycle
+const DEF_MONTHS = [6,0,6,6,0,4,0,6,6,3,2,6,0,3,0,0,3,0,0,6,3];
+const DAY = 864e5;
+const today = new Date(); today.setHours(12,0,0,0);
+const iso = d => d.toISOString().slice(0,10);
+const pd = s => new Date(s+'T12:00:00');
+const yy = s => pd('20'+s.slice(0,2)+'-'+s.slice(2,4)+'-'+s.slice(4,6));
+const eur = v => v==null||isNaN(v) ? '–' : v.toLocaleString('el-GR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
+const fmtD = d => d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'});
+const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-let S = { user: null, hh: null, items: [], lines: [], purchases: [], counts: [], offers: [], ticks: new Set(), members: [] };
-
-async function q(p) { const { data, error } = await p; if (error) { toast(error.message); throw error; } return data; }
-function show(id) { for (const v of ["v-auth", "v-hh"]) $(v).classList.toggle("hidden", v !== id); $("tabs").classList.toggle("hidden", id !== "app"); if (id !== "app") document.querySelectorAll(".tab").forEach((t) => t.classList.add("hidden")); }
-function tab(t) { document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.t === t)); document.querySelectorAll(".tab").forEach((s) => s.classList.toggle("hidden", s.id !== "t-" + t)); try { localStorage.setItem("sc-tab", t); } catch (e) {} render(); }
-let curTab = () => (document.querySelector("#tabs button.on") || {}).dataset?.t || "order";
-
-// ---------------- data ----------------
-async function load() {
-  const h = S.hh.id;
-  const [items, purchases, lines, counts, offers, ticks, members] = await Promise.all([
-    q(sb.from("items").select("*").eq("household_id", h).order("category").order("name")),
-    q(sb.from("purchases").select("*").eq("household_id", h).order("bought_on", { ascending: false })),
-    q(sb.from("purchase_lines").select("*").eq("household_id", h)),
-    q(sb.from("counts").select("*").eq("household_id", h).order("counted_at")),
-    q(sb.from("offers").select("*").eq("household_id", h)),
-    q(sb.from("basket_ticks").select("*").eq("household_id", h)),
-    q(sb.from("members").select("*").eq("household_id", h)),
-  ]);
-  Object.assign(S, { items, purchases, lines, counts, offers, members, ticks: new Set(ticks.map((t) => t.item_id + "|" + t.order_date)) });
-  compute(); render();
+// ---------- state (db when available, else this browser) ----------
+let state = { stock:{}, settings:{}, offers:null, orders:[], prices:null };
+let db = null, mode = 'local';
+const LS = 'pantry-stockup-v1';
+function lsLoad(){ try{ const s = JSON.parse(localStorage.getItem(LS)||'null'); if(s) Object.assign(state,s); }catch(e){} }
+function lsSave(){ try{ localStorage.setItem(LS, JSON.stringify(state)); }catch(e){} }
+const queues = {};
+function save(key){
+  if(mode!=='db'){ lsSave(); return; }
+  const q = queues[key] || (queues[key] = {busy:false,again:false});
+  if(q.busy){ q.again = true; return; }
+  q.busy = true;
+  const body = key==='stock' ? {items:state.stock} : key==='settings' ? state.settings : key==='offers' ? state.offers : key==='prices' ? state.prices : {list:state.orders};
+  sbSave(key, body).catch(e=>toast('Could not save ('+(e.message||e.code)+')')).finally(()=>{ q.busy=false; if(q.again){ q.again=false; save(key);} });
 }
 
-// ---------------- Pantry Stock-Up maths (manual §3) ----------------
-function compute() {
-  const pById = Object.fromEntries(S.purchases.map((p) => [p.id, p]));
-  const cut = Date.now() - 730 * DAY, t0 = today().getTime();
-  const nextOrder = S.hh.next_order ? new Date(S.hh.next_order).getTime() : t0 + S.hh.order_cycle_days * DAY;
-  const daysTo = Math.max(0, (nextOrder - t0) / DAY), cycle = S.hh.order_cycle_days;
-  for (const it of S.items) {
-    const buys = S.lines.filter((l) => l.item_id === it.id && pById[l.purchase_id]).map((l) => ({ ...l, d: new Date(pById[l.purchase_id].bought_on).getTime() }))
-      .filter((b) => b.d >= cut).sort((a, b) => a.d - b.d);
-    // merge same day
-    const days = []; for (const b of buys) { const last = days[days.length - 1]; if (last && last.d === b.d) last.qty += Number(b.qty); else days.push({ d: b.d, qty: Number(b.qty), price: b.unit_price, offer: b.on_offer }); }
-    let use = 0, note = "";
-    if (days.length >= 2) {
-      const span = (days[days.length - 1].d - days[0].d) / DAY;
-      const units = days.reduce((s, b) => s + b.qty, 0) - days[days.length - 1].qty;
-      use = span > 0 ? units / span * 30.4 : 0;
-      const gap = span / (days.length - 1);
-      if ((t0 - days[days.length - 1].d) / DAY > Math.max(120, 2.5 * gap)) { use = 0; note = "όχι πρόσφατα"; }
-    } else if (days.length === 1) { use = days[0].qty / Math.max(60, (t0 - days[0].d) / DAY) * 30.4; note = "μία αγορά"; }
-    const lastCount = S.counts.filter((c) => c.item_id === it.id).slice(-1)[0];
-    let stock;
-    if (lastCount) {
-      const ct = new Date(lastCount.counted_at).getTime();
-      const after = days.filter((b) => b.d > ct).reduce((s, b) => s + b.qty, 0);
-      stock = Number(lastCount.qty) + after - use / 30.4 * (t0 - ct) / DAY;
-    } else if (days.length) { const l = days[days.length - 1]; stock = l.qty - use / 30.4 * (t0 - l.d) / DAY; }
-    else stock = 0;
-    stock = Math.max(0, stock);
-    const offer = S.offers.find((o) => o.item_id === it.id && (!o.valid_to || new Date(o.valid_to).getTime() >= t0));
-    const horizonDays = offer && Number(it.stockup_months) > 0 ? Number(it.stockup_months) * 30.4 : cycle;
-    let need = use / 30.4 * (daysTo + horizonDays) - stock;
-    need = Math.max(need, Number(it.min_stock || 0) - stock);
-    const step = it.by_weight ? 0.1 : 1;
-    const buy = days.length >= 2 || Number(it.min_stock) > 0 ? Math.max(0, Math.ceil(need / step - 1e-9) * step) : 0;
-    const prices = days.map((b) => b.price).filter((p) => p != null);
-    Object.assign(it, { _use: use, _stock: stock, _buy: buy, _note: note, _n: days.length, _offer: offer, _last: days[days.length - 1],
-      _paidLast: prices.length ? Number(prices[prices.length - 1]) : null, _low: prices.length ? Math.min(...prices.map(Number)) : null });
+// ---------- model ----------
+let PRODUCTS = new Map();
+function buildProducts(){
+  PRODUCTS = new Map();
+  for(const r of RAW.P){
+    const [sku,name,cat,unit,nAll,first,minU,minD,lastU,cur,nb,hist,url,f0d,f0u] = r;
+    PRODUCTS.set(sku,{sku,name,cat,unit,nAll,first,minU,minD:yy(minD),lastU,cur,nb:!!nb,url,f0d:f0d?yy(f0d):null,f0u,
+      h: hist.split(' ').map(x=>{const [d,q,u]=x.split(':');return {d:yy(d),q:+q,u:u!=null?+u:null};})});
   }
-  S.daysTo = daysTo; S.nextOrderISO = new Date(nextOrder).toISOString().slice(0, 10);
-}
-
-// ---------------- render ----------------
-function render() {
-  if (!S.hh) return;
-  const t = curTab();
-  if (t === "order") renderOrder(); if (t === "pantry") renderPantry(); if (t === "items") renderItems(); if (t === "buy") renderBuy(); if (t === "set") renderSet();
-}
-function orderLines() { return S.items.filter((i) => i.active && i._buy > 0).sort((a, b) => (a.category || "").localeCompare(b.category || "") || a.name.localeCompare(b.name)); }
-function renderOrder() {
-  $("o-date").value = S.nextOrderISO; $("o-cycle").textContent = `σε ${Math.round(S.daysTo)} μέρες · κύκλος ${S.hh.order_cycle_days} μέρες`;
-  const L = orderLines(), est = L.reduce((s, i) => s + (i._offer?.price ?? i._paidLast ?? 0) * i._buy, 0);
-  const month = new Date().toISOString().slice(0, 7), spent = S.purchases.filter((p) => p.bought_on.startsWith(month)).reduce((s, p) => s + Number(p.total || 0), 0);
-  $("kpi").innerHTML = `<div><span class="small muted">Γραμμές</span><b>${L.length}</b></div><div><span class="small muted">Εκτίμηση</span><b>${eur(est)}</b></div>
-    <div><span class="small muted">Ξοδεύτηκαν τον μήνα</span><b>${eur(spent)}</b></div><div><span class="small muted">Προϋπολογισμός</span><b>${S.hh.monthly_budget ? eur(S.hh.monthly_budget - spent) + " απομένουν" : "–"}</b></div>`;
-  const key = (i) => i.id + "|" + S.nextOrderISO;
-  const rows = [...L].sort((a, b) => S.ticks.has(key(a)) - S.ticks.has(key(b)));
-  $("o-tbl").innerHTML = `<tr><th></th><th class="num">Αγορά</th><th>Προϊόν</th><th>Κατηγορία</th><th class="num">Απόθεμα</th><th class="num">Χρήση/μήνα</th><th class="num">Τιμή</th></tr>` +
-    (rows.map((i) => `<tr class="${S.ticks.has(key(i)) ? "done" : ""}"><td><input type="checkbox" data-tick="${i.id}" ${S.ticks.has(key(i)) ? "checked" : ""}></td>
-      <td class="num"><b>${n1(i._buy, i.by_weight)}</b> ${esc(i.unit)}</td><td>${i.url ? `<a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.name)}</a>` : esc(i.name)}${i.code ? ` <span class="small muted">${esc(i.code)}</span>` : ""}</td>
-      <td class="small">${esc(i.category)}</td><td class="num">${n1(i._stock, i.by_weight)}</td><td class="num">${i._use.toLocaleString("el-GR", { maximumFractionDigits: 1 })}</td>
-      <td class="num">${i._offer ? `<span class="pill offer">${eur(i._offer.price)} ${esc(i._offer.label || "προσφορά")}</span>` : eur(i._paidLast)}</td></tr>`).join("") ||
-      `<tr><td colspan="7" class="muted">Τίποτα για αγορά. Πρόσθεσε αγορές στην καρτέλα «Αγορές»: ένα προϊόν μπαίνει στη λίστα από τη 2η αγορά του.</td></tr>`);
-  $("o-tbl").querySelectorAll("[data-tick]").forEach((c) => c.onchange = async () => {
-    const row = { household_id: S.hh.id, item_id: c.dataset.tick, order_date: S.nextOrderISO };
-    if (c.checked) await q(sb.from("basket_ticks").upsert(row)); else await q(sb.from("basket_ticks").delete().match(row));
-    c.checked ? S.ticks.add(row.item_id + "|" + row.order_date) : S.ticks.delete(row.item_id + "|" + row.order_date); renderOrder();
-  });
-}
-function renderPantry() {
-  const f = norm($("p-filter").value);
-  const its = S.items.filter((i) => i.active && (!f || norm(i.name + " " + i.category).includes(f)));
-  let cat = null, h = `<tr><th>Προϊόν</th><th class="num">Απόθεμα</th><th></th><th class="small">Τελ. μέτρηση</th></tr>`;
-  for (const i of its) {
-    if (i.category !== cat) { cat = i.category; h += `<tr><td colspan="4" style="background:var(--acc2);font-weight:600">${esc(cat || "Χωρίς κατηγορία")}</td></tr>`; }
-    const lc = S.counts.filter((c) => c.item_id === i.id).slice(-1)[0];
-    h += `<tr><td>${esc(i.name)} <span class="small muted">${esc(i._note)}</span></td><td class="num"><b>${n1(i._stock, i.by_weight)}</b> ${esc(i.unit)}</td>
-      <td class="row" style="flex-wrap:nowrap"><button class="s" data-c="${i.id}" data-d="-1">−</button><button class="s" data-c="${i.id}" data-d="1">+</button>
-      <input type="number" step="${i.by_weight ? 0.1 : 1}" min="0" style="width:70px" placeholder="μέτρηση" data-set="${i.id}"></td>
-      <td class="small muted">${lc ? new Date(lc.counted_at).toLocaleDateString("el-GR") : "–"}</td></tr>`;
+  for(const o of state.orders){
+    const d = pd(o.d);
+    for(const [sku,name,slug,q,unit,v] of o.items){
+      if(!sku || !q) continue;
+      let p = PRODUCTS.get(sku);
+      if(!p){ const ci = CATSLUG.indexOf((slug||'').split('/')[0]); p = {sku,name,url:slug&&slug.includes('/')?slug:null,cat:ci<0?0:ci,unit:unit||'τεμ',nAll:0,first:o.d,minU:v/q,minD:d,lastU:v/q,cur:null,nb:false,h:[]}; PRODUCTS.set(sku,p); }
+      const ex = p.h.find(e=>+e.d===+d);
+      // same day from eshop and store: merge once into one purchase; same source twice = duplicate, skip
+      if(ex){ const st = o.store?1:0, es = ex.st||0; if(es!==2 && es!==st && ex.u!=null){ const v0 = ex.u*ex.q; ex.q += q; ex.u = (v0+v)/ex.q; ex.st = 2; } continue; }
+      p.h.push({d,q,u:q?v/q:null,st:o.store?1:0}); p.h.sort((a,b)=>a.d-b.d); p.nAll++;
+      p.lastU = v/q; if(v/q < p.minU){ p.minU=v/q; p.minD=d; }
+    }
   }
-  $("p-tbl").innerHTML = h;
-  const save = async (id, qty) => { await q(sb.from("counts").insert({ household_id: S.hh.id, item_id: id, qty: Math.max(0, Math.round(qty * 10) / 10) })); await load(); toast("Αποθηκεύτηκε"); };
-  $("p-tbl").querySelectorAll("[data-c]").forEach((b) => b.onclick = () => { const it = S.items.find((i) => i.id === b.dataset.c); const st = it.by_weight ? 0.1 : 1; save(it.id, (it.by_weight ? Math.round(it._stock * 10) / 10 : Math.round(it._stock)) + st * Number(b.dataset.d)); });
-  $("p-tbl").querySelectorAll("[data-set]").forEach((inp) => inp.onchange = () => inp.value !== "" && save(inp.dataset.set, num(inp.value)));
 }
-function renderItems() {
-  $("cats").innerHTML = [...new Set(S.items.map((i) => i.category).filter(Boolean))].map((c) => `<option>${esc(c)}</option>`).join("");
-  $("i-tbl").innerHTML = `<tr><th>Προϊόν</th><th>Κατηγορία</th><th class="num">Αγορές</th><th class="num">Χρήση/μήνα</th><th class="num">Τελ. τιμή</th><th class="num">Χαμηλότερη</th><th>Προσφορά τώρα</th><th></th></tr>` +
-    S.items.map((i) => `<tr style="${i.active ? "" : "opacity:.5"}"><td>${esc(i.name)} ${i.by_weight ? '<span class="pill">κιλό</span>' : ""}</td><td class="small">${esc(i.category)}</td>
-      <td class="num">${i._n}</td><td class="num">${i._use.toLocaleString("el-GR", { maximumFractionDigits: 1 })}</td><td class="num">${eur(i._paidLast)}</td><td class="num">${eur(i._low)}</td>
-      <td><input style="width:90px" placeholder="€" data-offer="${i.id}" value="${i._offer ? String(i._offer.price).replace(".", ",") : ""}"></td>
-      <td><button class="s" data-act="${i.id}">${i.active ? "Απόκρυψη" : "Επαναφορά"}</button></td></tr>`).join("");
-  $("i-tbl").querySelectorAll("[data-act]").forEach((b) => b.onclick = async () => { const it = S.items.find((i) => i.id === b.dataset.act); await q(sb.from("items").update({ active: !it.active }).eq("id", it.id)); load(); });
-  $("i-tbl").querySelectorAll("[data-offer]").forEach((inp) => inp.onchange = async () => {
-    await q(sb.from("offers").delete().eq("item_id", inp.dataset.offer));
-    const p = num(inp.value); if (!isNaN(p)) await q(sb.from("offers").insert({ household_id: S.hh.id, item_id: inp.dataset.offer, price: p, label: "προσφορά" }));
-    load();
-  });
+// store receipts (o.store) count in spend, stock and prices, but not in the order cycle, last delivery or the eshop sync (v12)
+function allOrders(withStore){
+  const base = RAW.O.map(([d,basket,total,n])=>({d,basket,total,n}));
+  const known = new Set(base.map(o=>o.d));
+  for(const o of state.orders){
+    if(o.store){ if(withStore) base.push({d:o.d,basket:o.basket,total:o.total,n:o.items.length,store:true}); }
+    else if(!known.has(o.d)) base.push({d:o.d,basket:o.basket,total:o.total,n:o.items.length});
+  }
+  return base.sort((a,b)=>a.d<b.d?-1:1);
 }
-function renderBuy() {
-  const byMonth = {}; for (const p of S.purchases) { const m = p.bought_on.slice(0, 7); byMonth[m] = (byMonth[m] || 0) + Number(p.total || 0); }
-  $("spend").innerHTML = Object.entries(byMonth).sort().reverse().slice(0, 6).map(([m, v]) => `<div><span class="small muted">${m}</span><b>${eur(v)}</b></div>`).join("");
-  const src = { order: "eshop", receipt: "απόδειξη", manual: "χειροκίνητα" };
-  $("h-tbl").innerHTML = `<tr><th>Ημερομηνία</th><th>Κατάστημα</th><th>Πηγή</th><th class="num">Γραμμές</th><th class="num">Σύνολο</th><th></th></tr>` +
-    S.purchases.map((p) => `<tr><td>${new Date(p.bought_on).toLocaleDateString("el-GR")}</td><td>${esc(p.retailer)}</td><td class="small">${src[p.source]}</td>
-      <td class="num">${S.lines.filter((l) => l.purchase_id === p.id).length}</td><td class="num">${eur(p.total)}</td><td><button class="s" data-del="${p.id}">Διαγραφή</button></td></tr>`).join("");
-  $("h-tbl").querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => { if (!confirm("Διαγραφή αυτής της αγοράς;")) return; await q(sb.from("purchases").delete().eq("id", b.dataset.del)); load(); });
+function defaultNext(){
+  const O = allOrders(); if(!O.length) return {next: iso(new Date(+today+7*DAY)), cycle: 14}; const last = pd(O[O.length-1].d);
+  const recent = O.slice(-13).map(o=>pd(o.d));
+  const gaps = recent.slice(1).map((d,i)=>(d-recent[i])/DAY).sort((a,b)=>a-b);
+  const med = gaps.length ? gaps[Math.floor(gaps.length/2)] : 30;
+  let n = new Date(+last + Math.round(med)*DAY);
+  if(n < today) n = new Date(+today + 7*DAY);
+  return {next: iso(n), cycle: Math.round(med)};
 }
-function renderSet() {
-  $("s-cycle").value = S.hh.order_cycle_days; $("s-budget").value = S.hh.monthly_budget ?? ""; $("s-code").textContent = S.hh.join_code;
-  $("s-members").textContent = S.members.length + (S.members.length === 1 ? " (μόνο εσύ)" : "");
+function settings(){
+  const d = defaultNext();
+  return { next: state.settings.next || d.next, cycle: state.settings.cycle || d.cycle,
+           months: CATS.map((_,i)=> state.settings.months && state.settings.months[i]!=null ? state.settings.months[i] : DEF_MONTHS[i]) };
+}
+const perPiece = u => /τεμ|συσκ/.test(u||'');
+// packs sold by weight (cheese, cold cuts, fresh meat, produce): the site price is per kilo, not per pack
+const byWeight = p => p.unit==='συσκ' && [1,12,17,18].includes(p.cat);
+const comparable = (x, p) => x && x.price!=null && perPiece(x.unit) && !byWeight(p);
+function offerMap(){
+  const m = new Map();
+  if(state.offers && state.offers.list) for(const o of state.offers.list) if(o.promo) m.set(String(o.sku), Object.assign({at:state.offers.at}, o));
+  // a product page read is newer evidence for that product: it sets or clears the offer
+  if(state.prices && state.prices.items) for(const [sku,lv] of Object.entries(state.prices.items)){
+    const cur = m.get(sku);
+    if(cur && cur.at > lv.at) continue;
+    if(lv.promo) m.set(sku, lv); else m.delete(sku);
+  }
+  return m;
+}
+function calc(p, S, OF){
+  const h = p.h.filter(e => today - e.d <= 730*DAY);
+  if(!h.length) return null;
+  const last = h[h.length-1], since = (today-last.d)/DAY;
+  let rate, span = 0;
+  if(h.length>=2){ span = (last.d - h[0].d)/DAY; rate = (h.reduce((s,e)=>s+e.q,0) - last.q) / Math.max(span,14); }
+  else rate = last.q / Math.max(60, since);
+  const avgGap = h.length>=2 ? span/(h.length-1) : 90;
+  const active = h.length>=2 && since <= Math.max(120, 2.5*avgGap);
+  if(!active) rate = 0;
+  const st = state.stock[p.sku];
+  let base, baseD, est = true;
+  if(st){ base = st.q; baseD = pd(st.at); est = false; } else { base = last.q; baseD = last.d; }
+  const added = p.h.filter(e => e.d > baseD).reduce((s,e)=>s+e.q,0);
+  const proj = Math.max(0, base + added - rate*Math.max(0,(today-baseD)/DAY));
+  const dN = Math.max(0,(pd(S.next)-today)/DAY);
+  const cover = rate>0 ? proj/rate : Infinity;
+  let status = 'ok';
+  if(rate>0 && cover < dN) status = 'out';
+  else if(rate>0 && cover < dN + S.cycle) status = 'low';
+  const up = x => isKg(p) ? Math.ceil(x*10 - 0.25)/10 : Math.ceil(x - 0.25);
+  const regular = rate>0 ? Math.max(0, up(rate*(dN+S.cycle) - proj)) : 0;
+  const live = state.prices && state.prices.items ? state.prices.items[p.sku] || null : null;
+  let off = OF.get(p.sku) || null;
+  // a live price at least 15% under what you paid last counts as an offer, even without a site offer label
+  if(!off && comparable(live, p) && live.price <= 0.85*p.lastU)
+    off = {price:live.price, old:Math.round(p.lastU*100)/100, unit:live.unit, at:live.at, badge:'−'+Math.round((1-live.price/p.lastU)*100)+'% vs paid last', drop:true};
+  const M = S.months[p.cat] || 0;
+  let stockUp = 0;
+  if(off && M>0 && rate>0) stockUp = Math.max(0, up(rate*(dN + M*30.4) - proj));
+  const buy = Math.max(regular, stockUp);
+  const offOk = off && comparable(off, p);
+  const price = offOk ? off.price : comparable(live, p) ? live.price : (p.cur && p.cur < p.lastU*1.6 ? p.cur : p.lastU);
+  const save = offOk && off.old ? (off.old - off.price)*buy : 0;
+  return {p, rate:rate*30.4, proj, est, cover, status, regular, stockUp, buy, off, live, price, save, since, active, nOrd:h.length};
+}
+function computeAll(){
+  const S = settings(), OF = offerMap(); const rows = [];
+  for(const p of PRODUCTS.values()){ const c = calc(p,S,OF); if(c) rows.push(c); }
+  return {S, OF, rows};
 }
 
-// ---------------- import (paste) ----------------
-function matchItem(name, code) {
-  const n = norm(name);
-  return S.items.find((i) => code && i.code && i.code === code) || S.items.find((i) => norm(i.name) === n || (i.aliases || []).some((a) => norm(a) === n)) || null;
+// ---------- render ----------
+function renderHead(rows){
+  const O = allOrders(), last = O[O.length-1];
+  document.getElementById('asof').textContent = O.length ? O.length+' orders since '+fmtD(pd(O[0].d))+' · last delivery '+fmtD(pd(last.d)) : 'No orders yet: add them under Refresh & settings (from sklavenitis.gr) or Add purchases.';
+  const OA = allOrders(true);
+  const yr = O.filter(o => today - pd(o.d) <= 365*DAY);
+  const spend = OA.filter(o => today - pd(o.d) <= 365*DAY).reduce((s,o)=>s+o.total,0);
+  const act = rows.filter(r=>r.active).length;
+  const k = [
+    [eur(spend/12),'avg spend / month (12 mo)'],
+    [String(rows.filter(r=>r.buy>0).length),'lines for next order'],
+    [String(yr.length),'orders in 12 months'],
+    [String(act),'products in regular use']
+  ];
+  document.getElementById('kpis').innerHTML = k.map(([b,s])=>`<div class="kpi"><b>${b}</b><span>${s}</span></div>`).join('');
+  document.getElementById('savestate').textContent = mode==='db' ? 'Saves to your household (every member sees it)' : 'Not signed in';
+  // chart
+  const months = []; const end = new Date(today.getFullYear(), today.getMonth(), 1);
+  for(let i=23;i>=0;i--){ const m = new Date(end.getFullYear(), end.getMonth()-i, 1); months.push({k:m.getFullYear()+'-'+String(m.getMonth()+1).padStart(2,'0'), m, v:0}); }
+  for(const o of OA){ const mm = months.find(x=>x.k===o.d.slice(0,7)); if(mm) mm.v += o.total; }
+  const W=720,H=170,pl=40,pb=22,pt=10, max = Math.max(500, ...months.map(m=>m.v));
+  const top = Math.ceil(max/100)*100, bw = (W-pl-8)/months.length;
+  const y = v => pt + (H-pt-pb)*(1 - v/top);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Monthly spend">`;
+  for(const g of [0, top/2, top]) s += `<line x1="${pl}" x2="${W-4}" y1="${y(g)}" y2="${y(g)}" stroke="var(--line)"/><text x="${pl-6}" y="${y(g)+4}" text-anchor="end" font-size="10" fill="var(--mute)" font-family="var(--f-num)">${g}</text>`;
+  months.forEach((m,i)=>{ const x = pl + i*bw + 2;
+    if(m.v>0) s += `<rect x="${x}" y="${y(m.v)}" width="${bw-4}" height="${y(0)-y(m.v)}" rx="2" fill="${i===months.length-1?'var(--offer)':'var(--accent)'}"><title>${m.k}: ${eur(m.v)}</title></rect>`;
+    if(m.m.getMonth()%3===0) s += `<text x="${x+(bw-4)/2}" y="${H-6}" text-anchor="middle" font-size="10" fill="var(--mute)">${m.m.toLocaleDateString('en-GB',{month:'short'})} ${String(m.m.getFullYear()).slice(2)}</text>`;
+  });
+  document.getElementById('chart').innerHTML = s + '</svg>';
 }
-let pending = [];
-function parsePaste(text) {
+const pname = r => { const u = r.p.url ? 'https://www.sklavenitis.gr/'+r.p.url+'/' : 'https://www.sklavenitis.gr/apotelesmata-anazitisis/?Query='+encodeURIComponent(r.p.name); return `<a class="plink" href="${esc(u)}" target="_blank" rel="noopener">${esc(r.p.name)}<span aria-hidden="true"> ↗</span></a>`; };
+const statusPill = r => r.status==='out' ? '<span class="pill p-bad">runs out before next order</span>' : r.status==='low' ? '<span class="pill p-warn">buy next order</span>' : r.active ? '<span class="pill p-ok">covered</span>' : r.nOrd<2 ? '<span class="pill p-mute">bought once</span>' : '<span class="pill p-mute">not bought lately</span>';
+const coverTxt = r => r.cover===Infinity ? '–' : r.cover>365 ? '>1 yr' : Math.round(r.cover)+' d';
+const per = (u, p) => p && byWeight(p) ? '/kg' : u && !perPiece(u) ? '/'+esc(u) : '';
+function priceCell(r){
+  const p = r.p, kg = byWeight(p);
+  const fd = d => fmtD(d instanceof Date ? d : new Date(d));
+  // Now: the latest site price we have for this product
+  let now = null;
+  if(r.live && r.live.price!=null) now = {v:r.live.price, u:r.live.unit, at:r.live.at, nb:r.live.nb, label:r.live.icon};
+  else if(r.off && !r.off.drop) now = {v:r.off.price, u:r.off.unit, at:r.off.at};
+  const cmp = now && !kg && perPiece(now.u);
+  const vsLast = cmp && p.lastU ? Math.round((now.v/p.lastU-1)*100) : null;
+  const atLow = cmp && now.v <= p.minU + 0.005;
+  const nowTxt = now ? `<b class="num ${atLow?'good':''}">${eur(now.v)}${kg?'/kg':''}</b><small>${fd(now.at)}${vsLast?` · ${vsLast>0?'+':'−'}${Math.abs(vsLast)}% vs paid last`:''}${atLow?(now.v < p.minU-0.005?' · below your lowest':' · = your lowest'):''}</small>` : `<small>not read yet</small>`;
+  // Offer: site offer (struck price or badge) or a price drop of 15%+ vs paid last
+  let offTxt = '<small>none</small>';
+  if(r.off) offTxt = `<b class="num offer-tag">${eur(r.off.price)}${kg?'/kg':''}</b>${r.off.old && !r.off.drop?` <s class="num">${eur(r.off.old)}</s>`:''}<small>${esc(r.off.drop ? 'price drop '+r.off.badge.split(' ')[0] : (r.off.badge||'offer'))}</small>`;
+  else if(now && now.label) offTxt = `<small>${esc(now.label)} (standing low price)</small>`;
+  if(now && now.nb) offTxt += ' <span class="pill p-mute">unavailable</span>';
+  return `<dl class="pg">
+    <dt>Now</dt><dd>${nowTxt}</dd>
+    <dt>Offer</dt><dd>${offTxt}</dd>
+    <dt>Paid last</dt><dd><span class="num">${eur(p.lastU)}</span><small>${fd(p.h[p.h.length-1].d)}</small></dd>
+    <dt>Lowest</dt><dd><span class="num">${eur(p.minU)}</span><small>${fd(p.minD)}</small></dd>
+  </dl>`;
+}
+// items sold by the kilo (loose fruit & veg from store receipts) keep one decimal (v13)
+const isKg = p => /κιλ|kg/i.test((p&&p.unit)||'');
+const r1 = (p, x) => isKg(p) ? Math.round(x*10)/10 : Math.round(x);
+const shown = r => Math.max(0, r1(r.p, r.proj));
+function stockCell(r, kind){
+  return `<div class="stock"><button data-step="${isKg(r.p)?-0.1:-1}" data-sku="${r.p.sku}" aria-label="One less">−</button><input type="number" min="0" step="${isKg(r.p)?0.1:1}" inputmode="${isKg(r.p)?'decimal':'numeric'}" id="st-${kind}-${r.p.sku}" data-sku="${r.p.sku}" value="${shown(r)}" aria-label="In stock"><button data-step="${isKg(r.p)?0.1:1}" data-sku="${r.p.sku}" aria-label="One more">+</button></div><div class="est">${r.est?'estimated':'counted '+fmtD(pd(state.stock[r.p.sku].at))}</div>`;
+}
+const ROW = {
+  list: r => { const why = r.stockUp>r.regular ? `<span class="pill p-off">stock up · offer</span>` : r.buy===0 ? '<span class="pill p-ok">covered now</span>' : statusPill(r);
+    return `<div class="name"><b>${pname(r)}</b><div class="meta">${why} · covers ${coverTxt(r)}</div></div>
+      <div class="r num c-rate">${r.rate.toFixed(1)} ${esc(r.p.unit)}</div>
+      <div class="r num c-status"><b>${r.buy}</b> ${esc(r.p.unit)}${r.stockUp>r.regular?`<div class="meta">${r.regular} needed</div>`:''}</div>
+      <div class="r c-price">${priceCell(r)}</div><div class="c-act">${stockCell(r,'list')}</div>`; },
+  stock: r => `<div class="name"><b>${pname(r)}</b><div class="meta">${statusPill(r)} · ${r.nOrd} orders in 24 mo · last ${fmtD(r.p.h[r.p.h.length-1].d)}${r.p.nb?' · <span class="pill p-mute">unavailable on site</span>':''}</div></div>
+      <div class="r num c-rate">${r.rate.toFixed(1)} ${esc(r.p.unit)}</div><div class="r num c-status">${coverTxt(r)}</div>
+      <div class="r c-price">${priceCell(r)}</div><div class="c-act">${stockCell(r,'stock')}</div>`,
+  offers: (r, S) => { const M = S.months[r.p.cat];
+    return `<div class="name"><b>${pname(r)}</b><div class="meta">${M?`stock-up horizon ${M} mo`:'perishable: next cycle only'} · you paid ${eur(r.p.lastU)} last, low ${eur(r.p.minU)}${r.save>0?` · saves ≈ <span class="offer-tag">${eur(r.save)}</span>`:''}</div></div>
+      <div class="r num c-rate">${r.rate.toFixed(1)} ${esc(r.p.unit)}</div><div class="r num c-status"><b>${r.buy}</b> ${esc(r.p.unit)}</div>
+      <div class="r c-price">${priceCell(r)}</div><div class="c-act">${stockCell(r,'offers')}</div>`; }
+};
+function listTotals(rows){
+  const need = rows.filter(r=>r.buy>0); const total = need.reduce((s,r)=>s+r.buy*r.price,0), saved = need.reduce((s,r)=>s+r.save,0);
+  return `<b>${need.length}</b> lines · ≈ <b>${eur(total)}</b>${saved>0?` · offers save ≈ <b class="offer-tag">${eur(saved)}</b>`:''}`;
+}
+function renderList(all){
+  const {S, rows} = all;
+  const need = rows.filter(r=>r.buy>0).sort((a,b)=>(a.p.cat-b.p.cat)||a.p.name.localeCompare(b.p.name,'el'));
+  document.getElementById('n-list').textContent = need.length;
+  const total = need.reduce((s,r)=>s+r.buy*r.price,0), saved = need.reduce((s,r)=>s+r.save,0);
+  let h = `<div class="bar"><div class="grp"><label for="next">Next order</label><input type="date" id="next" value="${S.next}"><span class="note">cycle ${S.cycle} days</span></div>
+    <div class="grp"><span class="num" id="listtotals">${listTotals(rows)}</span><button class="btn ghost" id="cktoggle">${ckOn?'Back to list':'Basket checklist'}</button><button class="btn ghost" id="copytab">Copy as table</button><button class="btn" id="copylist">Copy list</button></div></div>`;
+  const bk = basketState(S.next);
+  if(ckOn){
+    const done = need.filter(r=>bk.done[r.p.sku]).length;
+    h += `<div class="updbar ${done===need.length&&need.length?'ok':''}"><span><b>${done} of ${need.length}</b> lines in the eshop basket · tick each line after adding it on sklavenitis.gr (name opens the product page)</span><button class="btn ghost" id="ckreset">Clear ticks</button></div><div class="list">`;
+    const ordered = need.filter(r=>!bk.done[r.p.sku]).concat(need.filter(r=>bk.done[r.p.sku]));
+    if(!ordered.length) h += `<div class="empty">Nothing needed before the next order with current stock.</div>`;
+    for(const r of ordered){ const d = !!bk.done[r.p.sku];
+      h += `<label class="ck ${d?'done':''}"><input type="checkbox" data-ck="${r.p.sku}" ${d?'checked':''} aria-label="In basket"><span class="q">${r.buy} ${esc(r.p.unit)}</span><span class="name"><b>${pname(r)}</b><span class="code">Κωδ. ${esc(r.p.sku)} · ${esc(CATS[r.p.cat])}</span></span><span class="r num">${r.off?`<span class="offer-tag">${eur(r.price)}</span>`:eur(r.price)}</span></label>`; }
+    h += `</div>`;
+    const el0 = document.getElementById('v-list'); el0.innerHTML = h; wireListBar(el0, S);
+    el0.querySelectorAll('[data-ck]').forEach(c => c.onchange = () => { const b = basketState(S.next); if(c.checked) b.done[c.dataset.ck]=1; else delete b.done[c.dataset.ck]; state.settings.basket = b; save('settings'); rerender(); });
+    el0.querySelector('#ckreset').onclick = () => { state.settings.basket = {date:S.next, done:{}}; save('settings'); rerender(); };
+    return;
+  }
+  h += `<div class="list">`;
+  if(!need.length) h += `<div class="empty">Nothing needed before the next order with current stock.</div>`;
+  else {
+    h += `<div class="row head"><div>Product</div><div class="r c-rate">Use / month</div><div class="r">Buy</div><div class="r c-price">Price</div><div class="r">In stock</div></div>`;
+    let cat = -1;
+    for(const r of need){
+      if(r.p.cat!==cat){ cat = r.p.cat; h += `<div class="cathead">${esc(CATS[cat])}</div>`; }
+      h += `<div class="row" data-row="${r.p.sku}" data-kind="list">${ROW.list(r)}</div>`;
+    }
+  }
+  h += `</div><p class="note">Buy = enough to cover use until the next order plus one cycle. For items on offer in categories with a stock-up horizon, it covers that many months instead (set per category under Refresh &amp; settings). Use per month comes from your orders of the last 24 months.</p>`;
+  const el = document.getElementById('v-list'); el.innerHTML = h;
+  wireListBar(el, S);
+}
+let ckOn = false;
+function basketState(next){ const b = state.settings.basket; return (b && b.date===next) ? {date:b.date, done:Object.assign({}, b.done||{})} : {date:next, done:{}}; }
+function needRows(){ return computeAll().rows.filter(r=>r.buy>0).sort((a,b)=>(a.p.cat-b.p.cat)||a.p.name.localeCompare(b.p.name,'el')); }
+function wireListBar(el, S){
+  el.querySelector('#next').onchange = e => { if(e.target.value){ state.settings.next = e.target.value; save('settings'); rerender(); } };
+  el.querySelector('#copylist').onclick = () => {
+    const txt = needRows().map(r=>`${r.buy} × ${r.p.name}${r.off?'  [offer '+eur(r.off.price)+']':''}`).join('\n');
+    copy(txt);
+  };
+  el.querySelector('#cktoggle').onclick = () => { ckOn = !ckOn; rerender(); };
+  el.querySelector('#copytab').onclick = () => {
+    const n = v => v==null||isNaN(v) ? '' : v.toFixed(2).replace('.',',');
+    const rows = needRows();
+    const head = ['Κωδικός','Προϊόν','Κατηγορία','Ποσότητα','Μονάδα','Τιμή','Προσφορά','Σύνολο','Link'];
+    const lines = rows.map(r => { const u = r.p.url ? 'https://www.sklavenitis.gr/'+r.p.url+'/' : 'https://www.sklavenitis.gr/apotelesmata-anazitisis/?Query='+encodeURIComponent(r.p.name);
+      return [r.p.sku, r.p.name, CATS[r.p.cat], String(r.buy).replace('.',','), r.p.unit, n(r.price), r.off?('ναι'+(r.off.old?' · πριν '+n(r.off.old):'')):'', n(r.buy*r.price), u].map(x=>String(x).replace(/[\t\n]/g,' ')).join('\t'); });
+    copy([head.join('\t')].concat(lines).join('\n'));
+  };
+}
+let stockFilter = {q:'', cat:'all', only:'active'};
+function renderStock(all){
+  const {rows} = all;
+  let list = rows.filter(r => (stockFilter.only==='all' || r.active) && (stockFilter.cat==='all' || r.p.cat==+stockFilter.cat) && (!stockFilter.q || r.p.name.toLowerCase().includes(stockFilter.q.toLowerCase())));
+  const rank = {out:0, low:1, ok:2};
+  list.sort((a,b)=>(a.p.cat-b.p.cat)||(rank[a.status]-rank[b.status])||a.p.name.localeCompare(b.p.name,'el'));
+  const cats = [...new Set(rows.map(r=>r.p.cat))].sort((a,b)=>a-b);
+  let h = `<div class="bar"><div class="grp"><input type="search" id="sq" placeholder="Search products" value="${esc(stockFilter.q)}" aria-label="Search products">
+    <select id="sc" aria-label="Category"><option value="all">All categories</option>${cats.map(c=>`<option value="${c}" ${stockFilter.cat==c?'selected':''}>${esc(CATS[c])}</option>`).join('')}</select>
+    <select id="so" aria-label="Show"><option value="active" ${stockFilter.only==='active'?'selected':''}>In regular use</option><option value="all" ${stockFilter.only==='all'?'selected':''}>All 24-month products</option></select></div>
+    <span class="note">${list.length} products · edit a count to replace the estimate</span></div><div class="list">
+    <div class="row head"><div>Product</div><div class="r c-rate">Use / month</div><div class="r">Covers</div><div class="r c-price">Price</div><div class="r">In stock</div></div>`;
+  let cat = -1;
+  for(const r of list){
+    if(r.p.cat!==cat){ cat = r.p.cat; h += `<div class="cathead">${esc(CATS[cat])}</div>`; }
+    h += `<div class="row" data-row="${r.p.sku}" data-kind="stock">${ROW.stock(r)}</div>`;
+  }
+  if(!list.length) h += `<div class="empty">No products match.</div>`;
+  h += `</div>`;
+  const el = document.getElementById('v-stock'); el.innerHTML = h;
+  const sq = el.querySelector('#sq'); sq.oninput = e => { stockFilter.q = e.target.value; clearTimeout(sq._t); sq._t = setTimeout(()=>{ renderStock(computeAll()); const n=document.getElementById('sq'); n.focus(); n.setSelectionRange(n.value.length,n.value.length); }, 200); };
+  el.querySelector('#sc').onchange = e => { stockFilter.cat = e.target.value; renderStock(computeAll()); };
+  el.querySelector('#so').onchange = e => { stockFilter.only = e.target.value; renderStock(computeAll()); };
+}
+function renderOffers(all){
+  const {rows, S} = all;
+  const el = document.getElementById('v-offers');
+  if(!state.offers && !state.prices){ document.getElementById('n-off').textContent=''; el.innerHTML = `<div class="card"><h2>No offers loaded yet</h2><p class="sub">Offers come from the site's Προσφορές pages. Load them under <b>Refresh &amp; settings</b>; matches with what you buy appear here with a stock-up quantity.</p></div>`; return; }
+  const mine = rows.filter(r=>r.off).sort((a,b)=>b.save-a.save || a.p.name.localeCompare(b.p.name,'el'));
+  document.getElementById('n-off').textContent = mine.length;
+  const src = [];
+  if(state.offers) src.push(`${state.offers.list.filter(o=>o.promo).length} offers on the Προσφορές pages, read ${fmtD(new Date(state.offers.at))}${state.offers.partial?' (incomplete read)':''}`);
+  if(state.prices) src.push(`product prices last read ${fmtD(new Date(state.prices.at))}`);
+  let h = `<div class="bar"><span class="note">${src.join(' · ')} · ${mine.length} on offer that you buy</span></div><div class="list">`;
+  if(!mine.length) h += `<div class="empty">None of the current offers match products from your last 24 months.</div>`;
+  else {
+    h += `<div class="row head"><div>Product</div><div class="r c-rate">Use / month</div><div class="r">Stock up</div><div class="r c-price">Offer</div><div class="r">In stock</div></div>`;
+    for(const r of mine){
+      h += `<div class="row" data-row="${r.p.sku}" data-kind="offers">${ROW.offers(r, S)}</div>`;
+    }
+  }
+  el.innerHTML = h + `</div>`;
+}
+function parseSize(name){
+  const n = name.replace(/,/g,'.');
+  let m = n.match(/(\d+)\s*πλύσεις/i); if(m) return {q:+m[1], u:'wash'};
+  m = n.match(/(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*(kg|g|gr|lt|l|ml)\b/i);
+  let mult = 1, val, unit;
+  if(m){ mult = +m[1]; val = +m[2]; unit = m[3].toLowerCase(); }
+  else { const all = [...n.matchAll(/(\d+(?:\.\d+)?)\s*(kg|g|gr|lt|l|ml)\b/gi)]; if(all.length){ const a = all[all.length-1]; val = +a[1]; unit = a[2].toLowerCase(); } }
+  if(val){ if(unit==='g'||unit==='gr') return {q:mult*val/1000,u:'kg'}; if(unit==='kg') return {q:mult*val,u:'kg'}; if(unit==='ml') return {q:mult*val/1000,u:'l'}; return {q:mult*val,u:'l'}; }
+  m = n.match(/(\d+)\s*m\b/); if(m) return {q:+m[1], u:'m'};
+  m = n.match(/(\d+)\s*(τεμ|φύλλα|κάψουλες|φακελάκια)/i); if(m) return {q:+m[1], u:'pc'};
+  return null;
+}
+const MU = {kg:'kg', l:'l', wash:'wash', m:'m', pc:'piece'};
+let swapScope = 'regular', swapWidth = 'type';
+// shelves where different types replace each other (pasta shapes, rice kinds)
+const SWAP_ACROSS = ['zymarika','ryzia'];
+function renderSwaps(all){
+  const yrAgo = new Date(+today - 365*DAY);
+  const info = [];
+  for(const r of all.rows){
+    const p = r.p; if(!p.url || byWeight(p)) continue;
+    const sz = parseSize(p.name); if(!sz || !sz.q) continue;
+    const seg = p.url.split('/');
+    const liveOk = comparable(r.live, p);
+    const price = liveOk ? r.live.price : p.lastU; if(!price) continue;
+    const units = p.h.filter(e => e.d > yrAgo).reduce((s,e)=>s+e.q,0);
+    info.push({r, p, sz, grp: seg[0]+'/'+seg[1], type: seg[2], price, liveOk, per: price/sz.q, units, regular: r.active});
+  }
+  const targets = info.filter(x => x.regular && x.units > 0);
+  const pool = info.filter(x => swapScope==='all' || x.regular);
   const out = [];
-  for (const raw of text.split(/\r?\n/)) {
-    if (!raw.trim()) continue;
-    const c = raw.includes("\t") ? raw.split("\t") : raw.split(";");
-    const d = pdate(c[0]); const name = (c[1] || "").trim(); const qty = num(c[2] ?? "1"); const price = num(c[3]);
-    out.push({ raw, date: d, name, qty: isNaN(qty) ? 1 : qty, price: isNaN(price) ? null : price, ok: !!(d && name), item: d && name ? matchItem(name) : null });
+  for(const t of targets){
+    const no = new Set(state.settings.noSwap || []);
+    const alts = pool.filter(a => !no.has(t.p.sku+'>'+a.p.sku) && a.p.sku!==t.p.sku && a.grp===t.grp && (swapWidth==='shelf' || a.type===t.type || SWAP_ACROSS.includes(t.grp.split('/')[1])) && a.sz.u===t.sz.u && a.per <= t.per*0.95)
+                     .sort((a,b)=>a.per-b.per).slice(0,3);
+    if(!alts.length) continue;
+    const yearly = (t.per - alts[0].per) * t.sz.q * t.units;
+    out.push({t, alts, yearly});
+  }
+  out.sort((a,b)=>b.yearly-a.yearly);
+  const total = out.reduce((s,x)=>s+x.yearly,0);
+  const pp = x => `${eur(x.per)}/${MU[x.sz.u]}`;
+  const src = x => x.liveOk ? 'site '+fmtD(new Date(x.r.live.at)) : 'paid '+fmtD(x.p.h[x.p.h.length-1].d);
+  let h = `<div class="bar"><div class="grp"><select id="sws" aria-label="Alternatives from"><option value="regular" ${swapScope==='regular'?'selected':''}>Alternatives from your regular products</option><option value="all" ${swapScope==='all'?'selected':''}>Alternatives from everything bought in 24 months</option></select>
+    <select id="swk" aria-label="How similar"><option value="type" ${swapWidth==='type'?'selected':''}>Same product type (pasta and rice: any shape or kind)</option><option value="shelf" ${swapWidth==='shelf'?'selected':''}>Same shelf, any type (wider, check fit)</option></select></div>
+    <span class="note num">${out.length} products have a cheaper alternative · up to <b>${eur(total)}</b> a year if you switched each to the cheapest one</span></div>
+    <div class="list">`;
+  if(!out.length) h += `<div class="empty">No cheaper alternatives among these products.</div>`;
+  for(const x of out){
+    h += `<div class="swap"><div class="sw-from"><b>${pname(x.t.r)}</b><div class="meta">${pp(x.t)} · ${eur(x.t.price)} (${src(x.t)}) · ${Math.round(x.t.units)} ${esc(x.t.p.unit)} in 12 months</div></div>
+      <div class="sw-to">${x.alts.map((a,i)=>`<div class="sw-alt"><span>${pname(a.r)}</span><span class="meta">${pp(a)} · ${eur(a.price)} (${src(a)})${a.type===x.t.type?' · same type':''}${a.regular?'':' · occasional'}</span><b class="num offer-tag">−${Math.round((1-a.per/x.t.per)*100)}%</b><button class="noswap" data-noswap="${x.t.p.sku}>${a.p.sku}" title="Not a substitute — hide this pair" aria-label="Not a substitute, hide this pair">✕</button></div>`).join('')}</div>
+      <div class="sw-save num"><b>${eur(x.yearly)}</b><span class="meta">a year, cheapest</span></div></div>`;
+  }
+  h += `</div><p class="note">By default alternatives are the same product type on the site (pasta and rice: any shape or kind, e.g. αχιβάδες ↔ σπαγγέτι); "same shelf" widens to the whole shelf. They are compared per kg, litre, wash, metre or piece, using pack sizes in the product names. Only alternatives at least 5% cheaper are shown. A year's saving = (price per unit − cheapest alternative's) × the amount you bought in the last 12 months. Prices are the site price when read, otherwise the last price you paid. Products sold by weight are left out. Whether a swap suits you (taste, use) is your call: ✕ hides a pair that is not a real substitute.</p>`;
+  const el = document.getElementById('v-swaps'); el.innerHTML = h;
+  el.querySelector('#sws').onchange = e => { swapScope = e.target.value; renderSwaps(computeAll()); };
+  el.querySelectorAll('[data-noswap]').forEach(b => b.onclick = () => { state.settings.noSwap = [...new Set([...(state.settings.noSwap||[]), b.dataset.noswap])]; save('settings'); renderSwaps(computeAll()); toast('Hidden'); });
+  const hidden = (state.settings.noSwap||[]).length;
+  if(hidden){ const r = document.createElement('button'); r.className='btn ghost'; r.textContent = `Show ${hidden} hidden pair${hidden>1?'s':''} again`; r.onclick = () => { state.settings.noSwap = []; save('settings'); renderSwaps(computeAll()); }; el.querySelector('.bar').append(r); }
+  el.querySelector('#swk').onchange = e => { swapWidth = e.target.value; renderSwaps(computeAll()); };
+}
+
+let changeScope = 'active';
+function renderChange(all){
+  const yrAgo = new Date(+today - 365*DAY);
+  const list = [];
+  for(const r of all.rows){
+    const p = r.p; if(!p.f0u || !p.f0d) continue;
+    if(changeScope==='active' && !r.active) continue;
+    const units = p.h.filter(e => e.d > yrAgo).reduce((s,e)=>s+e.q,0);
+    if(!units) continue;
+    const liveOk = comparable(r.live, p);
+    const curU = liveOk ? r.live.price : p.lastU;
+    const years = Math.max(0, (today - p.f0d)/DAY/365.25);
+    const diff = curU - p.f0u;
+    const perYr = diff * units;
+    const cagr = years >= 1 && p.f0u > 0 ? (Math.pow(curU/p.f0u, 1/years) - 1)*100 : null;
+    // price you paid as of a date: your last purchase on or before it
+    const asOf = dt => { let best = null; for(const e of p.h) if(e.d <= dt && e.u) best = e; return best; };
+    const mAgo = new Date(today); mAgo.setMonth(mAgo.getMonth()-1);
+    const yAgo = new Date(today); yAgo.setFullYear(yAgo.getFullYear()-1);
+    const pm = asOf(mAgo), py = asOf(yAgo);
+    list.push({r, p, units, curU, liveOk, years, diff, pct: p.f0u ? diff/p.f0u*100 : 0, perYr, cagr, now: curU*units, pm, py});
+  }
+  list.sort((a,b)=>b.perYr-a.perYr);
+  const up = list.filter(x=>x.perYr>0.005).reduce((s,x)=>s+x.perYr,0), down = list.filter(x=>x.perYr<-0.005).reduce((s,x)=>s+x.perYr,0);
+  const now = list.reduce((s,x)=>s+x.now,0), then = list.reduce((s,x)=>s+x.p.f0u*x.units,0);
+  const sg = v => (v>0.005?'+':v<-0.005?'−':'')+eur(Math.abs(v));
+  const col = v => v>0.005?'var(--bad)':v<-0.005?'var(--ok)':'var(--mute)';
+  let h = `<div class="kpis">
+      <div class="kpi"><b class="num">${sg(up+down)}</b><span>net extra per year</span></div>
+      <div class="kpi"><b class="num" style="color:var(--bad)">${sg(up)}</b><span>items now dearer</span></div>
+      <div class="kpi"><b class="num" style="color:var(--ok)">${sg(down)}</b><span>items now cheaper</span></div>
+      <div class="kpi"><b class="num">${then>0?((now/then-1)*100>=0?'+':'−')+Math.abs((now/then-1)*100).toFixed(1):'–'}%</b><span>same yearly basket, first → current price</span></div></div>
+    <p class="note num">${['pm','py'].map((k,i)=>{ const L = list.filter(x=>x[k]); const nowS = L.reduce((s,x)=>s+x.curU*x.units,0), refS = L.reduce((s,x)=>s+x[k].u*x.units,0); if(!refS) return ''; const pc=(nowS/refS-1)*100; return `<b>${i?'vs a year ago':'vs a month ago'}:</b> same yearly basket ${pc>=0?'+':'−'}${Math.abs(pc).toFixed(1)}% (${sg(nowS-refS)} per year, ${L.length} products)`; }).filter(Boolean).join(' · ')}</p>
+    <div class="bar"><div class="grp"><select id="chs" aria-label="Products"><option value="active" ${changeScope==='active'?'selected':''}>In regular use</option><option value="all" ${changeScope==='all'?'selected':''}>All bought in the last 12 months</option></select></div>
+    <span class="note">${list.length} products · € per year = (current − first price) × units bought in the last 12 months</span></div>
+    <div class="list chwrap"><div class="row head ch"><div>Product</div><div class="r">First paid</div><div class="r">Current</div><div class="r">Change</div><div class="r">Month ago</div><div class="r">Year ago</div><div class="r">Units / yr</div><div class="r">€ per year</div></div>`;
+  for(const x of list){
+    h += `<div class="row ch"><div class="name"><b>${pname(x.r)}</b><div class="meta">${esc(CATS[x.p.cat])}${byWeight(x.p)?' · sold by weight: price per pack, pack weight can vary':''}</div></div>
+      <div class="r num">${eur(x.p.f0u)}<div class="meta">${fmtD(x.p.f0d)}</div></div>
+      <div class="r num">${eur(x.curU)}<div class="meta">${x.liveOk?'site '+fmtD(new Date(x.r.live.at)):'paid '+fmtD(x.p.h[x.p.h.length-1].d)}</div></div>
+      <div class="r num" style="color:${col(x.diff)}">${x.pct>0.5?'+':x.pct<-0.5?'−':''}${Math.abs(x.pct).toFixed(0)}%<div class="meta">${x.cagr!=null?(x.cagr>=0?'+':'−')+Math.abs(x.cagr).toFixed(1)+'%/yr':'under 1 yr'}</div></div>
+      ${[x.pm, x.py].map(ref => { if(!ref) return '<div class="r meta">no purchase</div>';
+        const dv = x.curU - ref.u, dp = ref.u ? dv/ref.u*100 : 0;
+        return `<div class="r num dl2">${eur(ref.u)}<small style="color:${col(dv)}">${sg(dv)} · ${dp>0.5?'+':dp<-0.5?'−':''}${Math.abs(dp).toFixed(0)}%</small><small class="meta">paid ${fmtD(ref.d)}</small></div>`; }).join('')}
+      <div class="r num">${Math.round(x.units*10)/10} ${esc(x.p.unit)}</div>
+      <div class="r num"><b style="color:${col(x.perYr)}">${sg(x.perYr)}</b></div></div>`;
+  }
+  if(!list.length) h += `<div class="empty">No products bought in the last 12 months.</div>`;
+  h += `</div><p class="note">First paid = unit price on your first order with that product (orders from Aug 2020). If that order was on offer, the change looks bigger than the shelf-price change. Current = the site price when read (Refresh &amp; settings → Prices), otherwise the last price you paid. %/yr = average yearly change since the first purchase. Month ago / Year ago = the price you paid on your last purchase on or before that date (a month / a year before today), and the difference from Current in € and %.</p>`;
+  const el = document.getElementById('v-change'); el.innerHTML = h;
+  el.querySelector('#chs').onchange = e => { changeScope = e.target.value; renderChange(computeAll()); };
+}
+
+let refreshMode = 'offers';
+function renderRefresh(all){
+  const {S} = all; const O = allOrders(); const lastD = O.length ? O[O.length-1].d : '2000-01-01';
+  const base = document.getElementById('snippet').textContent.replace('__SINCE__', lastD);
+  const items = rows => JSON.stringify(rows.filter(r=>r.p.url).map(r=>[r.p.sku, r.p.url]));
+  const listRows = all.rows.filter(r=>r.buy>0), regRows = all.rows.filter(r=>r.active);
+  const SN = {
+    offers: base.replace('__ORDERS__','true').replace('__OFFERS__','true').replace('__ITEMS__','[]'),
+    plist: base.replace('__ORDERS__','false').replace('__OFFERS__','false').replace('__ITEMS__', items(listRows)),
+    preg: base.replace('__ORDERS__','false').replace('__OFFERS__','false').replace('__ITEMS__', items(regRows))
+  };
+  const snip = SN[refreshMode] || SN.offers;
+  const tLabel = {offers:'Offers + new orders', plist:`Prices · next-order list (${listRows.length})`, preg:`Prices · all in regular use (${regRows.length})`};
+  const tTime = {offers:'about 1.5 s per offer page', plist:`about ${Math.ceil(listRows.length*1.7/60)} min`, preg:`about ${Math.ceil(regRows.length*1.7/60)} min`};
+  let h = `<div class="two"><div class="card"><h2>Refresh from sklavenitis.gr</h2>
+    <ol class="steps"><li>Open <span class="num">sklavenitis.gr</span> signed in, in Safari or Chrome.</li><li>Open the developer console (Safari: ⌥⌘C, Chrome: ⌥⌘J).</li><li>Pick what to read, copy the script, paste it in the console and press Return. It reads slowly (${tTime[refreshMode]}) so the site does not block it.${refreshMode==='offers'?` Offers and any orders delivered after ${O.length ? fmtD(pd(lastD)) : 'your first order'}.`:' Current price and offer on each product page.'}</li><li>Copy the result and paste it here.</li></ol>
+    <div class="grp" style="display:flex;flex-wrap:wrap;gap:6px">${Object.keys(SN).map(k=>`<button class="btn ${k===refreshMode?'':'ghost'}" data-mode="${k}">${tLabel[k]}</button>`).join('')}</div>
+    <pre class="code" id="snip">${esc(snip)}</pre><div class="grp" style="display:flex;gap:8px"><button class="btn ghost" id="copysnip">Copy script</button></div></div>
+    <div class="card"><h2>Paste result</h2><textarea id="paste" placeholder='{"v":1,"at":"…","orders":[…],"offers":[…]}' aria-label="Paste result"></textarea>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn" id="apply">Apply</button><span class="note" id="applymsg"></span></div>
+    <p class="note">New orders add to stock automatically from their delivery date. Offers replace the previous offer list.</p></div></div>
+    <div class="card"><div class="bar"><h2>Stock-up horizon per category (months)</h2><label class="grp note">Order cycle <input type="number" id="cyc" min="7" max="90" value="${S.cycle}" style="width:70px"> days</label></div>
+    <p class="note">When something you buy is on offer, Buy covers this many months of use. 0 means buy only for the next cycle (fresh and chilled goods).</p>
+    <div class="months">${CATS.map((c,i)=>`<label for="m${i}">${esc(c)} <input type="number" id="m${i}" data-m="${i}" min="0" max="24" step="0.5" value="${S.months[i]}"></label>`).join('')}</div></div>`;
+  const el = document.getElementById('v-refresh'); el.innerHTML = h;
+  el.querySelector('#copysnip').onclick = () => copy(snip);
+  el.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { refreshMode = b.dataset.mode; renderRefresh(computeAll()); });
+  el.querySelector('#cyc').onchange = e => { const v=+e.target.value; if(v>=7){ state.settings.cycle=v; save('settings'); rerender(); } };
+  el.querySelectorAll('[data-m]').forEach(inp => inp.onchange = e => { const m = settings().months.slice(); m[+e.target.dataset.m] = Math.max(0,+e.target.value||0); state.settings.months = m; save('settings'); rerender(); });
+  el.querySelector('#apply').onclick = () => {
+    const msg = el.querySelector('#applymsg');
+    let j; try{ j = JSON.parse(el.querySelector('#paste').value.trim()); }catch(e){ msg.textContent = 'That is not the script result. Copy the whole text from the box the script shows.'; return; }
+    if(!j || j.v!==1 || !Array.isArray(j.offers) || !Array.isArray(j.orders)){ msg.textContent = 'Unrecognised format. Run the current script again and paste its result.'; return; }
+    const known = new Set(allOrders().map(o=>o.d)); let added = 0;
+    for(const o of j.orders){ if(o && o.d && !known.has(o.d)){ state.orders.push(o); added++; } }
+    if(added) save('orders');
+    if(j.offers.length){ state.offers = {at:j.at, partial:!!j.partial, list:j.offers}; save('offers'); }
+    const pr = Array.isArray(j.prices) ? j.prices.filter(x=>x && x.sku && x.price!=null) : [];
+    if(pr.length){ const items = Object.assign({}, state.prices ? state.prices.items : {}); for(const x of pr) items[String(x.sku)] = Object.assign({at:j.at}, x); state.prices = {at:j.at, items}; save('prices'); }
+    buildProducts(); rerender();
+    msg.textContent = `Applied: ${added} new order${added===1?'':'s'}, ${j.offers.filter(o=>o.promo).length} offers, ${pr.length} prices${j.partial?' (the site stopped the read early; run it again later for the rest)':''}.`;
+  };
+}
+function rerender(){
+  const all = computeAll();
+  renderHead(all.rows); renderList(all); renderStock(all); renderOffers(all); renderChange(all); renderSwaps(all);
+  if(document.getElementById('v-refresh').hidden || !document.getElementById('v-refresh').innerHTML) renderRefresh(all);
+}
+
+// ---------- stock edits (delegated) ----------
+function currentStock(sku){
+  const p = PRODUCTS.get(sku); const c = p && calc(p, settings(), offerMap()); return c ? shown(c) : 0;
+}
+function setStock(sku, q, focusSel){
+  state.stock[sku] = {q: Math.max(0, r1(PRODUCTS.get(sku), q)), at: iso(today)};
+  clearTimeout(setStock._t); setStock._t = setTimeout(()=>{ save('stock'); }, 600);
+  // update this product's rows in place; lists re-sort only when you switch tabs
+  const all = computeAll(); const r = all.rows.find(x=>x.p.sku===sku);
+  if(r) document.querySelectorAll(`[data-row="${sku}"]`).forEach(row => { row.innerHTML = ROW[row.dataset.kind](r, all.S); });
+  const lt = document.getElementById('listtotals'); if(lt) lt.innerHTML = listTotals(all.rows);
+  document.getElementById('n-list').textContent = all.rows.filter(x=>x.buy>0).length;
+  renderHead(all.rows);
+  if(focusSel){ const f = document.querySelector(focusSel); if(f) f.focus(); }
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('button[data-step]'); if(!b) return;
+  const row = b.closest('[data-row]'); const sku = b.dataset.sku;
+  setStock(sku, currentStock(sku) + (+b.dataset.step), row ? `[data-row="${sku}"][data-kind="${row.dataset.kind}"] button[data-step="${b.dataset.step}"]` : null);
+});
+document.addEventListener('change', e => { const t = e.target; if(t.matches('input[data-sku]')){ const row=t.closest('[data-row]'); setStock(t.dataset.sku, +t.value||0, row?`[data-row="${t.dataset.sku}"][data-kind="${row.dataset.kind}"] input`:null); } });
+
+// ---------- tabs ----------
+const TABS = ['list','stock','offers','change','swaps','add','refresh'];
+function show(t){
+  const all = computeAll(); renderList(all); renderStock(all); renderOffers(all); renderChange(all); renderSwaps(all);
+  TABS.forEach(x => { document.getElementById('v-'+x).hidden = x!==t; document.querySelector(`[data-tab="${x}"]`).setAttribute('aria-selected', x===t); });
+  if(t==='refresh') renderRefresh(computeAll());
+  if(t==='add') renderAdd();
+}
+document.getElementById('tabs').onclick = e => { const b = e.target.closest('button[data-tab]'); if(b) show(b.dataset.tab); };
+if(TABS.includes(location.hash.slice(1))) show(location.hash.slice(1));
+
+// ---------- helpers ----------
+function toast(t){ const d = document.createElement('div'); d.className='toast'; d.textContent=t; document.body.append(d); setTimeout(()=>d.remove(),2200); }
+function copy(txt){
+  try{ navigator.clipboard.writeText(txt).then(()=>toast('Copied'), ()=>fallback()); }catch(e){ fallback(); }
+  function fallback(){ const ta=document.createElement('textarea'); ta.value=txt; document.body.append(ta); ta.select(); try{document.execCommand('copy'); toast('Copied');}catch(e){ toast('Select the text and copy it'); } ta.remove(); }
+}
+
+// ---------- automatic update on open (Claude desktop app, built-in browser) ----------
+const HB = 'host:claude_browser';
+const upd = {running:false, stop:false, done:0, total:0, newOrders:0, phase:''};
+function updBar(text, kind){
+  const el = document.getElementById('updbar'); if(!el) return;
+  el.hidden = !text; el.className = 'updbar ' + (kind||'');
+  el.innerHTML = text ? `<span>${text}</span>${upd.running?'<button class="btn ghost" id="updstop">Stop</button>':''}` : '';
+  const s = document.getElementById('updstop'); if(s) s.onclick = () => { upd.stop = true; s.disabled = true; s.textContent = 'Stopping…'; };
+}
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+async function hostText(mcp, tool, input){
+  const r = await mcp.callTool(HB, tool, input);
+  if(typeof r.payload === 'string') return r.payload;
+  return (r.content||[]).map(c=>c.text||'').join('\n');
+}
+const numGr = s => parseFloat(String(s).replace(/\./g,'').replace(',','.'));
+function parseProductText(t){
+  const a = t.search(/Βρίσκεστε εδώ:[^\n]*\n/); const b = t.indexOf('Κωδικός:');
+  if(a<0 || b<0) return null;
+  const seg = t.slice(t.indexOf('\n', a)+1, b);
+  const pm = [...seg.matchAll(/(\d+(?:\.\d{3})*,\d{2})\s*€\s*\/?\s*(τεμ|συσκ|κιλό|λίτρο)/g)];
+  if(!pm.length) return null;
+  const last = pm[pm.length-1];
+  const om = seg.match(/(?:^|\n)(\d+(?:\.\d{3})*,\d{2})[\t ]*\/(τεμ|συσκ|κιλό|λίτρο)/);
+  const bm = seg.match(/(?:^|\n)-\n([\d.,]+)\n(€|%)/);
+  const old = om ? numGr(om[1]) : null, badge = bm ? '−'+bm[1]+(bm[2]==='€'?' €':'%') : null;
+  return {price:numGr(last[1]), unit:last[2]+'.', old, badge, icon:null, promo:!!(old||badge), nb:/Προσωρινά μη διαθέσιμο/.test(seg)};
+}
+function parseOrderText(t){
+  const dm = t.match(/Ημερομηνία Παράδοσης\n(\d\d)\/(\d\d)\/(\d{4})/); if(!dm) return null;
+  const total = (t.match(/Σύνολο Παραγγελίας\n([\d.,]+)\s*€/)||[])[1], basket = (t.match(/Αξία Καλαθιού\*\*\n([\d.,]+)\s*€/)||[])[1];
+  const start = t.search(/Προϊόντα \(\d+\)/); if(start<0) return null;
+  const L = t.slice(start).split('\n').slice(1).map(s=>s.trim());
+  const byName = new Map(); for(const p of PRODUCTS.values()) byName.set(p.name, p);
+  const items = [];
+  for(let i=0;i<L.length-2;i++){
+    const q = L[i+1].match(/^(\d+(?:,\d+)?)\s*(τεμ|συσκ|γρ)\.?$/), v = L[i+2].match(/^([\d.,]+)\s*€$/);
+    if(q && v && L[i] && !/^[-\d,€]+$/.test(L[i])){
+      const p = byName.get(L[i]);
+      items.push([p ? p.sku : 'n-'+L[i].length+'-'+[...L[i]].reduce((s,c)=>(s*31+c.charCodeAt(0))>>>0,0).toString(36), L[i], p && p.url ? p.url : '', numGr(q[1]), q[2], numGr(v[1])]);
+      i += 2;
+    }
+  }
+  return {d: dm[3]+'-'+dm[2]+'-'+dm[1], total: total?numGr(total):null, basket: basket?numGr(basket):null, items};
+}
+async function autoUpdate(force){
+  if(upd.running) return;
+  if(!force && state.prices && state.prices.at && new Date(state.prices.at).toDateString() === new Date().toDateString()) return;
+  let mcp = null; try{ mcp = await window.claude.use('mcp'); }catch(e){}
+  if(!mcp){ if(force) updBar('Automatic updates run when this page is open in the Claude desktop app.', 'warn'); return; }
+  upd.running = true; upd.stop = false; upd.done = 0; upd.newOrders = 0;
+  try{
+    updBar('Updating from sklavenitis.gr: checking for new orders…');
+    const o = await hostText(mcp, 'preview_start', {url:'https://www.sklavenitis.gr/account/istoriko-paraggelion/'});
+    const tabId = (o.match(/tabId\s+([^\s)]+)\)/)||[])[1];
+    if(!tabId) throw {message:'the browser pane did not open'};
+    await sleep(2500);
+    const lt = await hostText(mcp, 'get_page_text', {tabId, max_chars:20000});
+    const codes = [...lt.matchAll(/Κωδικός Παραγγελίας\n(\w+)\nΧρόνος Παράδοσης\n(\d\d)\/(\d\d)\/(\d{4})/g)].map(m=>({code:m[1], d:m[4]+'-'+m[3]+'-'+m[2]}));
+    if(!codes.length){ updBar('Not signed in to sklavenitis.gr in the Claude app browser. Sign in there (Είσοδος), then press Update now.', 'warn'); return; }
+    const lastKnown = allOrders().slice(-1)[0].d;
+    for(const c of codes.filter(c=>c.d > lastKnown).reverse()){
+      if(upd.stop) break;
+      await hostText(mcp, 'navigate', {tabId, url:'https://www.sklavenitis.gr/account/istoriko-paraggelion/?OrderNumber='+c.code});
+      await sleep(1200);
+      const ot = await hostText(mcp, 'get_page_text', {tabId, max_chars:60000});
+      const ord = parseOrderText(ot);
+      if(ord && ord.items.length && !allOrders().some(x=>x.d===ord.d)){ state.orders.push(ord); upd.newOrders++; }
+    }
+    if(upd.newOrders){ save('orders'); buildProducts(); }
+    // prices: next-order list first, then the other regular products
+    const all = computeAll();
+    const rows = all.rows.filter(r=>r.active && r.p.url).sort((a,b)=>(b.buy>0)-(a.buy>0));
+    upd.total = rows.length;
+    const items = Object.assign({}, state.prices ? state.prices.items : {});
+    const at0 = new Date().toISOString();
+    for(const r of rows){
+      if(upd.stop) break;
+      updBar(`Updating prices from sklavenitis.gr: ${upd.done} of ${upd.total}${upd.newOrders?` · ${upd.newOrders} new order${upd.newOrders>1?'s':''} added`:''}`);
+      await hostText(mcp, 'navigate', {tabId, url:'https://www.sklavenitis.gr/'+r.p.url+'/'});
+      await sleep(900);
+      const pt = await hostText(mcp, 'get_page_text', {tabId, max_chars:6000});
+      if(/Access Denied/i.test(pt)){ upd.blocked = true; break; }
+      const x = parseProductText(pt);
+      if(x) items[r.p.sku] = Object.assign({at:new Date().toISOString(), sku:r.p.sku}, x);
+      upd.done++;
+      if(upd.done % 10 === 0){ state.prices = {at:at0, items:Object.assign({}, items)}; save('prices'); }
+      await sleep(700);
+    }
+    if(upd.done){ state.prices = {at:at0, items}; save('prices'); }
+    rerender();
+    const msg = `Updated ${fmtD(new Date())}: ${upd.done} of ${upd.total} prices${upd.newOrders?`, ${upd.newOrders} new order${upd.newOrders>1?'s':''}`:''}`;
+    upd.running = false;
+    updBar(upd.blocked ? msg+'. The site paused access; the rest will update next time.' : upd.stop ? msg+' (stopped).' : msg+'.', upd.blocked?'warn':'ok');
+    setTimeout(()=>{ if(!upd.running) updBar(''); }, 8000);
+  }catch(e){
+    upd.running = false;
+    const c = e && e.code;
+    updBar(c==='server_not_connected' ? 'Automatic updates run when this page is open in the Claude desktop app.' :
+           c==='not_in_manifest' || c==='approval_required' || c==='cancelled' ? 'Browser access was not allowed. Press Update now to allow it.' :
+           'Update stopped: '+esc((e && e.message) || 'unknown error')+'. Press Update now to try again.', 'warn');
+  } finally { upd.running = false; }
+}
+
+// ---------- household storage (Supabase, shared by the household's members) ----------
+const SB = supabase.createClient('https://hyxnwvnjiasjgfdohztx.supabase.co', 'sb_publishable_9HaJlBsEsRmzW-YgffdlHg_R8ekR6Qd');
+let HH = null, ME = null;
+async function sbSave(key, body){
+  const { error } = await SB.from('household_state').upsert({ household_id: HH.id, key, data: body, updated: new Date().toISOString() });
+  if(error) throw error;
+}
+async function loadHousehold(){
+  const { data: rows, error } = await SB.from('household_state').select('key,data').eq('household_id', HH.id);
+  if(error) throw error;
+  RAW = {cats: DEFAULT_CATS, P: [], O: []};
+  state = { stock:{}, settings:{}, offers:null, orders:[], prices:null };
+  for(const r of rows){ const v = r.data, k = r.key;
+    if(k==='snapshot') RAW = Object.assign({cats: DEFAULT_CATS, P: [], O: []}, v);
+    else if(k==='stock') state.stock = Object.assign({}, v.items||{});
+    else if(k==='settings') state.settings = Object.assign({}, v);
+    else if(k==='offers') state.offers = v;
+    else if(k==='orders') state.orders = (v.list||[]).slice();
+    else if(k==='prices') state.prices = {at:v.at, items:Object.assign({}, v.items||{})};
+  }
+  CATS = RAW.cats; mode = 'db';
+  buildProducts(); rerender();
+}
+const gate = id => { for(const g of ['g-auth','g-hh','app']) document.getElementById(g).hidden = g!==id; };
+async function boot(){
+  const { data } = await SB.auth.getSession();
+  if(!data.session){ gate('g-auth'); return; }
+  ME = data.session.user;
+  const { data: hhs, error } = await SB.from('households').select('*').order('created');
+  if(error){ toast(error.message); gate('g-auth'); return; }
+  if(!hhs.length){ gate('g-hh'); return; }
+  HH = hhs[0]; document.getElementById('hhname').textContent = '· ' + HH.name;
+  gate('app');
+  try{ await loadHousehold(); }catch(e){ toast('Could not load ('+e.message+')'); }
+  const t = location.hash.slice(1); if(TABS.includes(t)) show(t);
+}
+const $ = id => document.getElementById(id);
+$('a-in').onclick = async () => { const { error } = await SB.auth.signInWithPassword({ email: $('a-email').value.trim(), password: $('a-pass').value }); $('a-msg').textContent = error ? error.message : ''; if(!error) boot(); };
+$('a-up').onclick = async () => { if($('a-pass').value.length < 8){ $('a-msg').textContent = 'Password: at least 8 characters.'; return; }
+  const { error } = await SB.auth.signUp({ email: $('a-email').value.trim(), password: $('a-pass').value, options: { emailRedirectTo: location.origin + location.pathname } });
+  $('a-msg').textContent = error ? error.message : 'Account created. Open the confirmation e-mail, click the link, then Sign in here.'; };
+$('hh-new').onclick = async () => { const { error } = await SB.rpc('create_household', { p_name: $('hh-name').value.trim() || 'Home' }); $('hh-msg').textContent = error ? error.message : ''; if(!error) boot(); };
+$('hh-join').onclick = async () => { const { error } = await SB.rpc('join_household', { p_code: $('hh-code').value }); $('hh-msg').textContent = error ? error.message : ''; if(!error) boot(); };
+$('hh-out').onclick = async () => { await SB.auth.signOut(); boot(); };
+
+// ---------- Add purchases: paste lines or a receipt photo (read on this device) ----------
+const normN = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-zα-ω0-9]+/g,' ').trim();
+const numAny = v => { if(v==null) return NaN; let t = String(v).trim().replace(/€/g,'').replace(/\s/g,''); if(/,\d+$/.test(t)) t = t.replace(/\./g,'').replace(',','.'); return parseFloat(t); };
+const dateAny = v => { v = String(v||'').trim(); let m = v.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/); if(m){ const y = m[3].length===2 ? '20'+m[3] : m[3]; return y+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'); } return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null; };
+function findProduct(name){ const n = normN(name); for(const p of PRODUCTS.values()) if(normN(p.name)===n) return p; return null; }
+const newSku = name => 'm-'+[...name].reduce((h,c)=>(h*31+c.charCodeAt(0))>>>0,7).toString(36);
+let pending = [];
+function parseLines(text, dflt){
+  const out = [];
+  for(const raw of text.split(/\r?\n/)){ if(!raw.trim()) continue;
+    const c = raw.includes('\t') ? raw.split('\t') : raw.split(';');
+    let d, name, q, u;
+    if(c.length >= 4){ d = dateAny(c[0]); name = (c[1]||'').trim(); q = numAny(c[2]); u = numAny(c[3]); }
+    else { d = dflt; name = (c[0]||'').trim(); q = numAny(c[1]||'1'); u = numAny(c[2]); }
+    out.push({raw, d, name, q: isNaN(q)?1:q, u: isNaN(u)?null:u});
   }
   return out;
 }
-function previewPending(target, note) {
-  const bad = pending.filter((p) => !p.ok).length, nw = pending.filter((p) => p.ok && !p.item).length;
-  target.innerHTML = `<p class="small">${pending.length} γραμμές · ${nw} νέα προϊόντα · ${bad ? `<b style="color:var(--bad)">${bad} με λάθος (παραλείπονται)</b>` : "όλες σωστές"} ${note || ""}</p>
-    <table><tr><th>Ημ/νία</th><th>Προϊόν</th><th class="num">Ποσ.</th><th class="num">Τιμή</th><th></th></tr>${pending.map((p, k) => `<tr style="${p.ok ? "" : "color:var(--bad)"}">
-      <td>${esc(p.date || "?")}</td><td><input value="${esc(p.name)}" data-k="${k}" style="width:100%"></td><td class="num"><input value="${p.qty}" data-q="${k}" style="width:60px"></td>
-      <td class="num"><input value="${p.price ?? ""}" data-p="${k}" style="width:80px"></td><td class="small">${p.ok ? (p.item ? "υπάρχει" : '<span class="pill">νέο</span>') : "λάθος"}</td></tr>`).join("")}</table>
-    <div class="row" style="margin-top:8px"><button class="b" id="b-save">Αποθήκευση</button><button class="g" id="b-cancel">Ακύρωση</button></div>`;
-  target.querySelectorAll("[data-k]").forEach((i) => i.onchange = () => { const p = pending[i.dataset.k]; p.name = i.value; p.item = matchItem(i.value); p.ok = !!(p.date && p.name); previewPending(target, note); });
-  target.querySelectorAll("[data-q]").forEach((i) => i.onchange = () => pending[i.dataset.q].qty = num(i.value) || 1);
-  target.querySelectorAll("[data-p]").forEach((i) => i.onchange = () => { const v = num(i.value); pending[i.dataset.p].price = isNaN(v) ? null : v; });
-  $("b-cancel").onclick = () => { pending = []; target.innerHTML = ""; };
-  $("b-save").onclick = () => savePending(target);
+function renderPending(){
+  const el = $('add-prev'); if(!pending.length){ el.innerHTML = ''; return; }
+  const bad = pending.filter(x=>!x.d||!x.name).length;
+  el.innerHTML = `<p class="note">${pending.length} lines · ${pending.filter(x=>x.name && !findProduct(x.name)).length} new products${bad?` · <b style="color:var(--bad)">${bad} without date or name (skipped)</b>`:''}. Correct names so they match your products.</p>
+    <table class="pv"><tr><th>Date</th><th>Product</th><th>Qty</th><th>Unit price €</th><th></th></tr>${pending.map((x,i)=>`<tr><td>${esc(x.d||'?')}</td><td><input data-k="${i}" value="${esc(x.name)}"></td><td><input data-q="${i}" value="${x.q}" style="width:64px"></td><td><input data-u="${i}" value="${x.u??''}" style="width:80px"></td><td class="note">${x.name&&findProduct(x.name)?'matched':'new'}</td></tr>`).join('')}</table>
+    <div class="grp" style="display:flex;gap:8px;margin-top:8px"><button class="btn" id="add-save">Save</button><button class="btn ghost" id="add-cancel">Cancel</button></div>`;
+  el.querySelectorAll('[data-k]').forEach(i => i.onchange = () => { pending[+i.dataset.k].name = i.value.trim(); renderPending(); });
+  el.querySelectorAll('[data-q]').forEach(i => i.onchange = () => { pending[+i.dataset.q].q = numAny(i.value) || 1; });
+  el.querySelectorAll('[data-u]').forEach(i => i.onchange = () => { const v = numAny(i.value); pending[+i.dataset.u].u = isNaN(v) ? null : v; });
+  $('add-cancel').onclick = () => { pending = []; renderPending(); };
+  $('add-save').onclick = savePending;
 }
-async function savePending(target) {
-  const ok = pending.filter((p) => p.ok); if (!ok.length) return;
-  const src = $("b-src").value, ret = $("b-ret").value.trim() || null;
-  for (const p of ok.filter((p) => !p.item)) {
-    const ex = matchItem(p.name);
-    p.item = ex || (await q(sb.from("items").insert({ household_id: S.hh.id, name: p.name, retailer: ret }).select().single()));
-    if (!ex) S.items.push(p.item);
+function savePending(){
+  const ok = pending.filter(x=>x.d && x.name); if(!ok.length) return;
+  const store = $('add-src').value === 'store';
+  const byDate = {}; for(const x of ok) (byDate[x.d] ||= []).push(x);
+  let n = 0;
+  for(const [d, ls] of Object.entries(byDate)){
+    if(!store && allOrders().some(o=>o.d===d)){ toast('An eshop order on '+d+' is already in; skipped'); continue; }
+    const items = ls.map(x => { const p = findProduct(x.name); const v = x.u!=null ? Math.round(x.u*x.q*100)/100 : 0;
+      return [p ? p.sku : newSku(x.name), p ? p.name : x.name, p && p.url ? p.url : '', x.q, p ? p.unit : (/κιλ|kg/i.test(x.raw)?'κιλό':'τεμ'), v]; });
+    const total = Math.round(items.reduce((s,i)=>s+i[5],0)*100)/100;
+    state.orders.push({d, total, basket: total, items, store, src: (store?'Store receipt':'Eshop order')+' added in Psonia '+iso(today)});
+    n++;
   }
-  const byDate = {}; for (const p of ok) (byDate[p.date] ||= []).push(p);
-  for (const [d, ls] of Object.entries(byDate)) {
-    const total = ls.reduce((s, p) => s + (p.price ?? 0) * p.qty, 0);
-    const pur = await q(sb.from("purchases").insert({ household_id: S.hh.id, bought_on: d, retailer: ret, source: src, total: Math.round(total * 100) / 100 }).select().single());
-    await q(sb.from("purchase_lines").insert(ls.map((p) => ({ purchase_id: pur.id, household_id: S.hh.id, item_id: p.item.id, text_printed: p.raw, qty: p.qty, unit_price: p.price, line_total: p.price != null ? Math.round(p.price * p.qty * 100) / 100 : null }))));
-  }
-  toast(`Αποθηκεύτηκαν ${ok.length} γραμμές σε ${Object.keys(byDate).length} αγορές`); pending = []; target.innerHTML = ""; $("b-paste").value = ""; await load();
+  if(n){ save('orders'); buildProducts(); rerender(); toast('Saved '+n+(n>1?' purchases':' purchase')); }
+  pending = []; $('add-paste').value = ''; renderPending();
 }
-
-// ---------------- receipt photo (on-device OCR) ----------------
-async function readReceipt(file) {
-  $("r-msg").textContent = "Φόρτωση αναγνώστη (πρώτη φορά ~10 MB)…";
-  if (!window.Tesseract) await new Promise((res, rej) => { const s = document.createElement("script"); s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
-  const { data } = await Tesseract.recognize(file, "ell+eng", { logger: (m) => m.status === "recognizing text" && ($("r-msg").textContent = `Ανάγνωση ${Math.round(m.progress * 100)}%`) });
-  const d = $("r-date").value || pdate((data.text.match(/\b\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/) || [])[0] || "") || today().toISOString().slice(0, 10);
-  const skip = /(ΣΥΝΟΛΟ|ΜΕΤΡΗΤΑ|ΚΑΡΤΑ|ΡΕΣΤΑ|ΦΠΑ|Φ\.Π\.Α|ΑΦΜ|TOTAL|ΠΛΗΡΩΜΗ|ΕΚΠΤΩΣΗ|ΑΠΟΔΕΙΞΗ|ΠΟΝΤΟΙ|ΤΗΛ)/i;
+async function readReceipt(file){
+  const msg = $('add-rmsg'); msg.textContent = 'Loading the reader (first time about 10 MB)…';
+  if(!window.Tesseract) await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); });
+  const { data } = await Tesseract.recognize(file, 'ell+eng', { logger: m => m.status==='recognizing text' && (msg.textContent = 'Reading '+Math.round(m.progress*100)+'%') });
+  const d = $('add-date').value || dateAny((data.text.match(/\b\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/)||[])[0]||'') || iso(today);
+  const skip = /(ΣΥΝΟΛΟ|ΜΕΤΡΗΤΑ|ΚΑΡΤΑ|ΡΕΣΤΑ|ΦΠΑ|Φ\.Π\.Α|ΑΦΜ|TOTAL|ΠΛΗΡΩΜΗ|ΑΠΟΔΕΙΞΗ|ΠΟΝΤΟΙ|ΤΗΛ)/i;
   pending = [];
-  for (const line of data.text.split("\n")) {
-    const L = line.trim(); if (L.length < 4 || skip.test(L)) continue;
-    const m = L.match(/^(.*?[A-Za-zΑ-Ωα-ωά-ώ].*?)\s+(?:(\d+(?:[.,]\d+)?)\s*[xXΧχ*]\s*)?(\d+[.,]\d{2})\s*[A-ZΑ-Ω%]?\s*$/);
-    if (!m) continue;
-    const qty = m[2] ? num(m[2]) : 1, tot = num(m[3]);
-    pending.push({ raw: L, date: d, name: m[1].replace(/\s{2,}/g, " ").trim(), qty, price: Math.round(tot / qty * 100) / 100, ok: true, item: matchItem(m[1]) });
+  for(const line of data.text.split('\n')){ const L = line.trim(); if(L.length < 4 || skip.test(L)) continue;
+    const m = L.match(/^(.*?[A-Za-zΑ-Ωα-ωά-ώ].*?)\s+(?:(\d+(?:[.,]\d+)?)\s*[xXΧχ*]\s*)?(\d+[.,]\d{2})\s*[A-ZΑ-Ω%]?\s*$/); if(!m) continue;
+    const q = m[2] ? numAny(m[2]) : 1, tot = numAny(m[3]);
+    pending.push({raw: L, d, name: m[1].replace(/\s{2,}/g,' ').trim(), q, u: Math.round(tot/q*100)/100});
   }
-  $("b-src").value = "receipt";
-  $("r-msg").textContent = pending.length ? `Βρέθηκαν ${pending.length} γραμμές — έλεγξε πριν την αποθήκευση.` : "Δεν βρέθηκαν γραμμές· δοκίμασε πιο καθαρή φωτογραφία ή επικόλληση.";
-  previewPending($("b-preview"), "· από φωτογραφία: διόρθωσε ονόματα ώστε να ταιριάζουν με τα προϊόντα σου");
+  $('add-src').value = 'store';
+  msg.textContent = pending.length ? pending.length+' lines found: check them before saving.' : 'No lines found: try a sharper photo, or paste the lines.';
+  renderPending();
 }
-
-// ---------------- boot ----------------
-async function boot() {
-  const { data } = await sb.auth.getSession();
-  if (!data.session) { $("who").textContent = ""; return show("v-auth"); }
-  S.user = data.session.user; $("who").textContent = S.user.email;
-  const hhs = await q(sb.from("households").select("*").order("created"));
-  if (!hhs.length) return show("v-hh");
-  S.hh = hhs[0]; show("app");
-  let t = "order"; try { t = localStorage.getItem("sc-tab") || t; } catch (e) {}
-  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.t === t));
-  document.querySelectorAll(".tab").forEach((s) => s.classList.toggle("hidden", s.id !== "t-" + t));
-  await load();
+async function renderAdd(){
+  const el = $('v-add');
+  el.innerHTML = `<div class="two"><div class="card"><h2>Paste purchases</h2>
+      <p class="note">One line per product: <span class="num">date ; product ; qty ; unit price</span> (or tab-separated from Excel). Without a date: <span class="num">product ; qty ; unit price</span> and the date below. Names that match a product join its history; new names become new products.</p>
+      <textarea id="add-paste" placeholder="30/10/2026;Βαρελίσια Φέτα ΣΥΝΕΤΑΙΡΙΣΜΟΣ ΚΑΛΑΒΡΥΤΩΝ ΠΟΠ;1;6,15"></textarea>
+      <div class="grp" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><select id="add-src"><option value="store">Store receipt</option><option value="eshop">Eshop order</option></select><input type="date" id="add-date" value="${iso(today)}"><button class="btn ghost" id="add-check">Check</button></div>
+      <p class="note">A store receipt counts in stock, use and prices, not in the order cycle (as in Pantry Stock-Up).</p></div>
+    <div class="card"><h2>Receipt photo</h2><p class="note">Read on this device (free, nothing is sent anywhere). Weaker on Greek than AI, so every line is shown for correction before saving.</p>
+      <input type="file" id="add-file" accept="image/*" capture="environment"><span class="note" id="add-rmsg"></span></div></div>
+    <div class="card" id="add-prev"></div>
+    <div class="card"><h2>Household</h2><p>${esc(HH.name)} · code for another member to join: <b class="pill p-ok num">${esc(HH.join_code)}</b> <span class="note" id="hh-members"></span></p>
+      <p class="note">Everyone in the household sees and changes the same products, stock and orders. Signed in as ${esc(ME.email)}.</p>
+      <div class="grp" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="hh-export">Download all data (JSON)</button><button class="btn ghost" id="hh-signout">Sign out</button></div></div>`;
+  $('add-check').onclick = () => { pending = parseLines($('add-paste').value, $('add-date').value); renderPending(); };
+  $('add-file').onchange = e => e.target.files[0] && readReceipt(e.target.files[0]).catch(er => $('add-rmsg').textContent = 'Error: '+er.message);
+  $('hh-signout').onclick = async () => { await SB.auth.signOut(); location.reload(); };
+  $('hh-export').onclick = () => { const b = new Blob([JSON.stringify({exported: new Date().toISOString(), household: HH.name, snapshot: RAW, state}, null, 1)], {type:'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'psonia-'+iso(today)+'.json'; a.click(); };
+  renderPending();
+  const { count } = await SB.from('members').select('*', { count: 'exact', head: true }).eq('household_id', HH.id);
+  if(count != null) $('hh-members').textContent = '· '+count+(count===1?' member (you)':' members');
 }
-document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => tab(b.dataset.t));
-$("a-in").onclick = async () => { const { error } = await sb.auth.signInWithPassword({ email: $("a-email").value, password: $("a-pass").value }); $("a-msg").textContent = error ? error.message : ""; if (!error) boot(); };
-$("a-up").onclick = async () => { if ($("a-pass").value.length < 8) return $("a-msg").textContent = "Κωδικός 8+ χαρακτήρες."; const { error } = await sb.auth.signUp({ email: $("a-email").value, password: $("a-pass").value }); $("a-msg").textContent = error ? error.message : "Έγινε. Άνοιξε το e-mail επιβεβαίωσης, πάτα το link και μετά «Σύνδεση» εδώ."; };
-$("hh-new").onclick = async () => { await q(sb.rpc("create_household", { p_name: $("hh-name").value.trim() || "Σπίτι" })); boot(); };
-$("hh-join").onclick = async () => { await q(sb.rpc("join_household", { p_code: $("hh-code").value })); boot(); };
-$("o-date").onchange = async () => { await q(sb.from("households").update({ next_order: $("o-date").value || null }).eq("id", S.hh.id)); S.hh.next_order = $("o-date").value; compute(); render(); };
-$("o-copy").onclick = () => { const L = orderLines(); const t = ["Κωδικός\tΠροϊόν\tΚατηγορία\tΠοσότητα\tΜονάδα\tΤιμή\tΠροσφορά\tΣύνολο\tLink", ...L.map((i) => { const p = i._offer?.price ?? i._paidLast; return [i.code || "", i.name, i.category || "", String(i._buy).replace(".", ","), i.unit, p != null ? String(p).replace(".", ",") : "", i._offer ? "ναι" : "", p != null ? (p * i._buy).toFixed(2).replace(".", ",") : "", i.url || ""].join("\t"); })].join("\n"); navigator.clipboard.writeText(t); toast("Αντιγράφηκε· επικόλληση σε Excel/Sheets"); };
-$("o-copytxt").onclick = () => { navigator.clipboard.writeText(orderLines().map((i) => `${n1(i._buy, i.by_weight)} × ${i.name}${i._offer ? ` [προσφορά ${eur(i._offer.price)}]` : ""}`).join("\n")); toast("Αντιγράφηκε"); };
-$("p-filter").oninput = renderPantry;
-$("i-add").onclick = async () => { const name = $("i-name").value.trim(); if (!name) return; await q(sb.from("items").insert({ household_id: S.hh.id, name, category: $("i-cat").value.trim() || null, retailer: $("i-ret").value.trim() || null, code: $("i-code").value.trim() || null, url: $("i-url").value.trim() || null, by_weight: $("i-kg").checked, unit: $("i-kg").checked ? "κιλό" : "τεμ", stockup_months: num($("i-hz").value) || 0 })); ["i-name", "i-code", "i-url"].forEach((k) => $(k).value = ""); load(); };
-$("b-check").onclick = () => { pending = parsePaste($("b-paste").value); previewPending($("b-preview")); };
-$("r-file").onchange = (e) => e.target.files[0] && readReceipt(e.target.files[0]).catch((er) => $("r-msg").textContent = "Σφάλμα: " + er.message);
-$("s-save").onclick = async () => { const upd = { order_cycle_days: Math.max(3, parseInt($("s-cycle").value) || 14), monthly_budget: $("s-budget").value === "" ? null : num($("s-budget").value) }; await q(sb.from("households").update(upd).eq("id", S.hh.id)); Object.assign(S.hh, upd); compute(); toast("Αποθηκεύτηκε"); render(); };
-$("s-out").onclick = async () => { await sb.auth.signOut(); S.hh = null; boot(); };
-$("s-export").onclick = () => { const b = new Blob([JSON.stringify({ exported: new Date().toISOString(), household: S.hh, items: S.items.map(({ _use, _stock, _buy, _note, _n, _offer, _last, _paidLast, _low, ...i }) => i), purchases: S.purchases, purchase_lines: S.lines, counts: S.counts, offers: S.offers }, null, 1)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = "psonia-export.json"; a.click(); };
-sb.auth.onAuthStateChange((ev) => { if (ev === "SIGNED_OUT") show("v-auth"); });
+SB.auth.onAuthStateChange(ev => { if(ev==='SIGNED_OUT') gate('g-auth'); });
 boot();
+})();
 </script>
-</body>
-</html>
+
+</body></html>
