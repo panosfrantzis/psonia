@@ -24,6 +24,27 @@ struct Reading: Codable, Equatable {
     var promo: Bool { old != nil || badge != nil }
 }
 
+// One eshop order, in Pantry Stock-Up's format: items = [sku, name, slug, qty, unit, value paid]
+struct Order: Codable, Equatable {
+    let d: String
+    let total: Double?
+    let basket: Double?
+    let items: [[JSONValue]]
+}
+enum JSONValue: Codable, Equatable {
+    case s(String), n(Double), null
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { self = .null } else if let v = try? c.decode(Double.self) { self = .n(v) } else { self = .s(try c.decode(String.self)) }
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self { case .s(let v): try c.encode(v); case .n(let v): try c.encode(v); case .null: try c.encodeNil() }
+    }
+    var string: String? { if case .s(let v) = self { return v }; return nil }
+    var any: Any { switch self { case .s(let v): return v; case .n(let v): return v; case .null: return NSNull() } }
+}
+
 @main
 struct PsoniaTestApp: App {
     var body: some Scene { WindowGroup { ContentView() } }
@@ -34,6 +55,7 @@ struct PsoniaTestApp: App {
 @MainActor
 final class PriceReader: NSObject, ObservableObject, WKNavigationDelegate {
     @Published var readings: [String: Reading] = [:]
+    @Published var orders: [Order] = []
     @Published var running = false
     @Published var status = "Ready"
     let web: WKWebView
@@ -71,6 +93,61 @@ final class PriceReader: NSObject, ObservableObject, WKNavigationDelegate {
 
     private func open(_ url: URL) async {
         await withCheckedContinuation { c in finish = c; web.load(URLRequest(url: url)) }
+    }
+
+
+    // Order history: list page → each order page (same reading as Pantry Stock-Up's site script)
+    private let jsList = #"""
+    (() => JSON.stringify([...new Set([...document.querySelectorAll('main a[href*="OrderNumber="]')].map(a => a.href.split('OrderNumber=')[1]))]))()
+    """#
+    private let jsOrder = #"""
+    (() => {
+      const num = s => { if (s == null) return null; const v = parseFloat(String(s).replace(/[^\d,.-]/g,'').replace(/\./g,'').replace(',','.')); return isNaN(v) ? null : v; };
+      const main = document.querySelector('main'); if (!main) return 'null';
+      const t = main.innerText.replace(/\s+/g,' ');
+      const dm = t.match(/Ημερομηνία Παράδοσης (\d\d)\/(\d\d)\/(\d{4})/); if (!dm) return 'null';
+      const items = [...document.querySelectorAll('tr.product')].map(r => { const a = r.querySelector('.product-td a'); const q = r.querySelector('.quant-td').innerText.trim();
+        return [((r.getAttribute('data-plugin-userlist')||'').match(/"Skus":"(\d+)"/)||[])[1]||'', a ? a.textContent.trim() : r.querySelector('.product-td').textContent.trim(),
+                ((a && a.getAttribute('href'))||'').replace(/^\/|\/$/g,''), num(q), q.replace(/[\d.,\s]/g,''), num(r.querySelector('.priceWrp').innerText)]; });
+      return JSON.stringify({ d: dm[3]+'-'+dm[2]+'-'+dm[1], total: num((t.match(/Σύνολο Παραγγελίας ([\d.,]+) €/)||[])[1]),
+                              basket: num((t.match(/Αξία Καλαθιού\*\* ([\d.,]+) €/)||[])[1]), items });
+    })()
+    """#
+
+    func readOrders() async -> Bool {
+        guard !running else { return false }
+        running = true; stop = false
+        defer { running = false }
+        status = "Reading your order history…"
+        await open(URL(string: "https://www.sklavenitis.gr/account/istoriko-paraggelion/")!)
+        try? await Task.sleep(for: .milliseconds(1500))
+        guard let s = try? await web.evaluateJavaScript(jsList) as? String, let d = s.data(using: .utf8),
+              let ids = try? JSONDecoder().decode([String].self, from: d), !ids.isEmpty else {
+            status = "Not signed in to the eshop: tap Eshop, sign in (Είσοδος), then Get my data again."; return false
+        }
+        var got: [Order] = []
+        for (i, id) in ids.enumerated() {
+            if stop { break }
+            status = "Reading order \(i + 1) of \(ids.count)…"
+            await open(URL(string: "https://www.sklavenitis.gr/account/istoriko-paraggelion/?OrderNumber=" + id)!)
+            try? await Task.sleep(for: .milliseconds(1200))
+            if let s = try? await web.evaluateJavaScript(jsOrder) as? String, let d = s.data(using: .utf8),
+               let o = try? JSONDecoder().decode(Order.self, from: d) { got.append(o) }
+        }
+        orders = got.sorted { $0.d < $1.d }
+        let lines = got.reduce(0) { $0 + $1.items.count }
+        status = "Got \(got.count) orders with \(lines) product lines\(stop ? " (stopped)" : ""). Next: Update prices, then Send to Psonia."
+        return true
+    }
+
+    // Products found in the orders (code + page address); empty until Get my data has run
+    var productsFromOrders: [Product] {
+        var seen = Set<String>(), out: [Product] = []
+        for o in orders.reversed() { for it in o.items {
+            guard it.count >= 3, let sku = it[0].string, !sku.isEmpty, let name = it[1].string, let slug = it[2].string, slug.contains("/"), !seen.contains(sku) else { continue }
+            seen.insert(sku); out.append(Product(sku: sku, name: name, category: slug.components(separatedBy: "/").first ?? "", url: "https://www.sklavenitis.gr/" + slug + "/"))
+        } }
+        return out
     }
 
     func cancel() { stop = true }
@@ -119,7 +196,7 @@ struct Psonia {
         return d.isEmpty ? [:] : try JSONSerialization.jsonObject(with: d)
     }
 
-    static func send(_ readings: [String: Reading], email: String, password: String) async throws -> Int {
+    static func send(_ readings: [String: Reading], orders: [Order], email: String, password: String) async throws -> (prices: Int, orders: Int) {
         let auth = try await request("/auth/v1/token?grant_type=password", method: "POST", body: ["email": email, "password": password]) as? [String: Any]
         guard let token = auth?["access_token"] as? String else { throw NSError(domain: "Psonia", code: 1, userInfo: [NSLocalizedDescriptionKey: "Sign-in failed"]) }
         guard let hh = (try await request("/rest/v1/households?select=id,name&order=created", token: token) as? [[String: Any]])?.first,
@@ -131,13 +208,32 @@ struct Psonia {
         for (sku, r) in readings where r.price != nil {
             var x: [String: Any] = ["at": iso.string(from: r.at), "sku": sku, "price": r.price!, "unit": (r.unit?.isEmpty == false ? r.unit! : "τεμ."),
                                     "promo": r.promo, "nb": r.nb ?? false, "src": "iPhone app"]
-            x["old"] = r.old ?? NSNull(); x["badge"] = r.badge ?? NSNull(); x["icon"] = r.icon ?? NSNull()
+            x["old"] = r.old.map { $0 as Any } ?? NSNull(); x["badge"] = r.badge.map { $0 as Any } ?? NSNull(); x["icon"] = r.icon.map { $0 as Any } ?? NSNull()
             items[sku] = x; n += 1
         }
         _ = try await request("/rest/v1/household_state", method: "POST", token: token,
                               body: ["household_id": hid, "key": "prices", "data": ["at": iso.string(from: Date()), "items": items]],
                               prefer: "resolution=merge-duplicates,return=minimal")
-        return n
+        // orders: add those whose delivery date the household does not have yet (same rule as Pantry's Apply)
+        var added = 0
+        if !orders.isEmpty {
+            let st = try await request("/rest/v1/household_state?household_id=eq.\(hid)&key=in.(orders,snapshot)&select=key,data", token: token) as? [[String: Any]] ?? []
+            var list = ((st.first { $0["key"] as? String == "orders" }?["data"] as? [String: Any])?["list"] as? [[String: Any]]) ?? []
+            var known = Set(list.compactMap { $0["d"] as? String })
+            if let snap = st.first(where: { $0["key"] as? String == "snapshot" })?["data"] as? [String: Any], let O = snap["O"] as? [[Any]] {
+                for o in O { if let d = o.first as? String { known.insert(d) } }
+            }
+            for o in orders where !known.contains(o.d) {
+                list.append(["d": o.d, "total": o.total.map { $0 as Any } ?? NSNull(), "basket": o.basket.map { $0 as Any } ?? NSNull(), "items": o.items.map { $0.map { $0.any } }, "src": "iPhone app"])
+                known.insert(o.d); added += 1
+            }
+            if added > 0 {
+                _ = try await request("/rest/v1/household_state", method: "POST", token: token,
+                                      body: ["household_id": hid, "key": "orders", "data": ["list": list]],
+                                      prefer: "resolution=merge-duplicates,return=minimal")
+            }
+        }
+        return (n, added)
     }
 }
 
@@ -166,12 +262,15 @@ struct ContentView: View {
                 Section {
                     Text(reader.status).font(.subheadline)
                     HStack {
-                        Button(reader.running ? "Stop" : "Update prices") {
+                        Button("1 · Get my data") { Task { if await reader.readOrders() { let p = reader.productsFromOrders; if !p.isEmpty { products = p } } } }
+                            .buttonStyle(.borderedProminent).disabled(reader.running)
+                        Button(reader.running ? "Stop" : "2 · Update prices") {
                             if reader.running { reader.cancel() } else { Task { await reader.read(products) } }
-                        }.buttonStyle(.borderedProminent)
-                        Button("Send to Psonia") { showSend = true }.buttonStyle(.bordered).disabled(reader.readings.isEmpty || reader.running)
+                        }.buttonStyle(.bordered)
                     }
-                    Text("\(products.count) products bought regularly · about 2 s each").font(.caption).foregroundStyle(.secondary)
+                    Button("3 · Send to Psonia") { showSend = true }.buttonStyle(.bordered).disabled((reader.readings.isEmpty && reader.orders.isEmpty) || reader.running)
+                    Text(reader.orders.isEmpty ? "Sign in once with Eshop (top right), then 1 · Get my data reads your orders by itself. Until then the list is your regular products from Pantry Stock-Up."
+                                               : "\(reader.orders.count) orders · \(products.count) products from your orders").font(.caption).foregroundStyle(.secondary)
                 }
                 ForEach(products) { p in
                     let r = reader.readings[p.sku]
@@ -209,9 +308,9 @@ struct ContentView: View {
                         TextField("E-mail", text: $email).textContentType(.emailAddress).keyboardType(.emailAddress).textInputAutocapitalization(.never)
                         SecureField("Password", text: $password)
                     }
-                    Button("Send \(reader.readings.values.filter { $0.price != nil }.count) prices") {
+                    Button("Send \(reader.orders.count) orders and \(reader.readings.values.filter { $0.price != nil }.count) prices") {
                         Task {
-                            do { let n = try await Psonia.send(reader.readings, email: email, password: password); sendMsg = "Sent \(n) prices. Reload Psonia." }
+                            do { let r = try await Psonia.send(reader.readings, orders: reader.orders, email: email, password: password); sendMsg = "Sent \(r.prices) prices and \(r.orders) new orders. Reload Psonia." }
                             catch { sendMsg = error.localizedDescription }
                         }
                     }
